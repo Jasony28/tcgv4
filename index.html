@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JWBnDr - Connexion</title>
+    <link rel="stylesheet" href="main.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#7b9acc">
+</head>
+<body class="auth-page">
+    <div class="auth-container">
+        <div class="auth-box">
+            <h1 class="game-title">JWBnDr</h1>
+            <h2>Connexion / Inscription</h2>
+            <button id="google-login-button" class="google-btn">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="Google logo"/>
+                Se connecter avec Google
+            </button>
+            <p id="error-message" class="error"></p>
+        </div>
+    </div>
+    <script type="module" src="auth.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js');
+            });
+        }
+    </script>
+     <script type="module" src="toast.js"></script>
+</body>
+</html>

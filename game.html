@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Booster - JWBnDr</title>
+    <link rel="stylesheet" href="main.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#7b9acc">
+</head>
+<body>
+   <header class="main-header"></header>
+    <main class="game-container">
+        <h2>Ouvrir un Booster</h2>
+        <div id="booster-selection-container">
+            <div id="daily-booster-area" class="booster-option" style="display: none;">
+                <p id="booster-status">...</p>
+                <div id="booster-pack-wrapper">
+                    <img src="assets/booster/booster.png" alt="Booster du Jour" id="booster-pack-image">
+                </div>
+            </div>
+            <div id="classic-booster-area" class="booster-option" style="display: none;">
+                <p>Boosters Classiques</p>
+                <div class="inventory-booster-pack" id="classic-booster-opener">
+                    <img src="assets/booster/booster.png" alt="Booster Classique">
+                    <span class="inventory-count" id="classic-booster-count">x0</span>
+                </div>
+            </div>
+            <div id="legendary-booster-area" class="booster-option" style="display: none;">
+                <p>Boosters Légendaires</p>
+                <div class="inventory-booster-pack" id="legendary-booster-opener">
+                    <img src="assets/booster/booster.png" alt="Booster Légendaire"> 
+                    <span class="inventory-count" id="legendary-booster-count">x0</span>
+                </div>
+            </div>
+        </div>
+        <div id="card-reveal-area" class="card-grid" style="display:none;"></div>
+    </main>
+    <script type="module" src="game.js"></script>
+    <script type="module" src="toast.js"></script>
+    <script type="module" src="header.js"></script>
+    <!-- 
+    <script>
+        // Désactive temporairement le Service Worker si besoin
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js');
+            });
+        }
+    </script>
+    -->
+</body>
+</html>

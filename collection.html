@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mon Album - JWBnDr</title>
+    <link rel="stylesheet" href="main.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#7b9acc">
+    
+</head>
+<body>
+    <header class="main-header"></header>
+    <main class="collection-container">
+        <h2>Ma Collection</h2>
+        <div id="collection-grid" class="card-grid"></div>
+    </main>
+    <div id="card-overlay" class="overlay" style="display:none;">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <div id="view-mode">
+                <img id="overlay-image" src="" alt="Carte en grand">
+                <div id="overlay-actions">
+                    <p id="overlay-card-name"></p>
+                    <p>Quantité possédée : <strong id="overlay-card-quantity"></strong></p>
+                    <button id="auction-button" style="display: none;">Mettre aux enchères</button>
+                    <button id="console-sell-button" class="button-secondary" style="display: none;">Vendre à la console</button>
+                </div>
+            </div>
+            <div id="sell-mode" style="display: none;">
+                <h3>Mettre en Vente : <span id="sell-card-name"></span></h3>
+                <div id="sell-card-preview" class="card"></div>
+                <div class="sell-form">
+                    <label for="sell-quantity-input">Quantité à vendre (max: <span id="sell-max-quantity"></span>) :</label>
+                    <input type="number" id="sell-quantity-input" min="1">
+                    <div id="sell-price-container"> <label for="sell-price-input">Prix de départ (min: <span id="sell-min-price"></span> pièces) :</label>
+    <input type="number" id="sell-price-input">
+</div>
+                    <button id="confirm-sell-button">Confirmer la mise en vente</button>
+                </div>
+            </div>
+            <p id="modal-error-message" class="error"></p>
+        </div>
+    </div>
+     <div id="toast-container"></div>
+    <div id="custom-modal" style="display:none;">
+      <div class="modal-content">
+        <span class="close-btn" id="custom-modal-close">&times;</span>
+        <div id="custom-modal-title" style="font-weight:bold;font-size:1.15em;margin-bottom:12px;"></div>
+        <div id="custom-modal-message" style="margin-bottom:20px;"></div>
+        <div id="custom-modal-actions" style="display:flex;gap:12px;justify-content:center;"></div>
+      </div>
+    </div>
+
+    <!-- Scripts APRES le HTML -->
+    <script type="module" src="collection.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js');
+            });
+        }
+    </script>
+     <script type="module" src="header.js"></script> <script type="module" src="toast.js"></script>
+    <script>
+        /* On désactive temporairement le Service Worker pour tester la connexion Google
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./service-worker.js');
+        });
+    }
+    */
+    </script>
+    <script type="module" src="toast.js"></script>
+</body>
+</html>

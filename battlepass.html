@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Passe de la Semaine - JWBnDr</title>
+    <link rel="stylesheet" href="main.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#7b9acc">
+</head>
+<body>
+    <header class="main-header"></header>
+
+    <main class="season-pass-page">
+        <div class="pass-track-container">
+            <h2 class="season-title">PASSE DE LA SEMAINE</h2>
+            <div class="pass-track-scroll">
+                <div class="pass-track">
+                    </div>
+            </div>
+        </div>
+
+        <div class="weekly-quests-container">
+            <h2 class="season-title">QUÊTES DE LA SEMAINE</h2>
+            <ul class="quests-list">
+                </ul>
+        </div>
+    </main>
+
+    <script type="module" src="battlepass.js"></script>
+    <script type="module" src="toast.js"></script>
+    <script>
+        /* On désactive temporairement le Service Worker pour tester la connexion Google
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./service-worker.js');
+        });
+    }
+    */
+    </script>
+     <script type="module" src="header.js"></script> <script type="module" src="toast.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js');
+            });
+        }
+    </script>
+    <script type="module" src="header.js"></script>
+</body>
+</html>

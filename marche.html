@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Marché - JWBnDr</title>
+    <link rel="stylesheet" href="main.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#7b9acc">
+</head>
+<body>
+    <header class="main-header"></header>
+    <main class="collection-container">
+        <h2>Marché des Enchères</h2>
+        <p id="no-auctions-message" style="display: none;">Il n'y a aucune enchère pour le moment.</p>
+        <div id="auctions-grid" class="card-grid"></div>
+    </main>
+    <div id="bid-modal" class="overlay" style="display:none;">
+    <div class="modal-content">
+        <span class="close-btn">&times;</span>
+        <h3><span id="modal-card-name"></span></h3>
+        <div id="modal-card-preview"></div>
+        <p>Vendeur : <span id="modal-seller-pseudo"></span></p>
+        <p>Prix actuel : <strong id="modal-current-price"></strong> pièces</p>
+        <p>Temps restant : <span id="modal-time-left"></span></p>
+
+        <div id="modal-actions-container">
+            <div class="bid-form" style="display: none;">
+                <input type="number" id="bid-amount-input" placeholder="Votre mise">
+                <button id="submit-bid-button">Placer l'enchère</button>
+            </div>
+            <button id="cancel-auction-button" class="button-secondary" style="display: none;">Annuler mon enchère</button>
+        </div>
+
+        <p id="modal-error-message" class="error"></p>
+
+        <div class="bid-history">
+            <h4>Historique des enchères</h4>
+            <ul id="bid-history-list"></ul>
+        </div>
+    </div>
+</div>
+    <script type="module" src="marche.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js');
+            });
+        }
+    </script>
+     <script type="module" src="header.js"></script> <script type="module" src="toast.js"></script>
+    <script>
+        /* On désactive temporairement le Service Worker pour tester la connexion Google
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./service-worker.js');
+        });
+    }
+    */
+    </script>
+    <script type="module" src="marche.js"></script>
+<script type="module" src="toast.js"></script>
+<script type="module" src="header.js"></script>
+
+<div id="toast-container"></div>
+<!-- Modale de confirmation universelle pour showConfirmDialog -->
+<div id="custom-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <span id="custom-modal-close" class="close">&times;</span>
+    <h3 id="custom-modal-title"></h3>
+    <p id="custom-modal-message"></p>
+    <div id="custom-modal-actions"></div>
+  </div>
+</div>
+
+</body>
+</html>

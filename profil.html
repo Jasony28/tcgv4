@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mon Profil - JWBnDr</title>
+    <link rel="stylesheet" href="main.css" />
+    <link rel="manifest" href="manifest.json" />
+    <meta name="theme-color" content="#7b9acc" />
+</head>
+<body>
+    <header class="main-header"></header>
+
+    <!-- Bloc profil et amis -->
+    <div class="profile-block" style="margin:32px auto 24px auto; max-width:700px;">
+        <!-- Ligne pseudo -->
+        <div class="user-info" style="margin-bottom:10px;">
+            <span>Pseudo : <strong id="profile-username"></strong></span>
+            <button id="edit-pseudo-btn" class="profile-btn" style="margin-left:14px;font-size:.97em;padding:6px 20px;">Modifier mon pseudo</button>
+            <span id="pseudo-change-info" style="color:#e67e22;margin-left:10px;"></span>
+        </div>
+        <!-- Gestion des amis -->
+        <button id="add-friend-btn" class="profile-btn">Ajouter mes amis</button>
+        <button id="friends-list-btn" class="profile-btn">Amis</button>
+        <div id="friends-section" style="display:none;"></div>
+        <!-- Gestion des demandes d'amis -->
+        <button id="friend-requests-btn" class="profile-btn">Demandes d'amis</button>
+        <div id="friend-requests-section" style="display:none;"></div>
+    </div>
+
+    <main class="profil-container">
+        <h2>Mes Statistiques</h2>
+        <section class="user-info">
+            <p>Pièces : <strong id="profile-coins">0</strong></p>
+        </section>
+        <div class="stats-grid">
+            <div class="stat-item">
+                <span class="stat-value" id="stats-boosters-opened">0</span>
+                <span class="stat-label">Boosters ouverts</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="stats-cards-sold-console">0</span>
+                <span class="stat-label">Cartes vendues (console)</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="stats-cards-sold-market">0</span>
+                <span class="stat-label">Cartes vendues (marché)</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="stats-failed-sales">0</span>
+                <span class="stat-label">Ventes échouées</span>
+            </div>
+            <div class="stat-item full-width">
+                <span class="stat-label">Vente la plus chère</span>
+                <span class="stat-value" id="stats-best-sale">Aucune</span>
+            </div>
+            <div class="stat-item full-width">
+                <span class="stat-label">Achat le plus cher</span>
+                <span class="stat-value" id="stats-best-purchase">Aucun</span>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modale de changement de pseudo -->
+    <div id="pseudo-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <span class="close" id="close-pseudo-modal">&times;</span>
+            <h3>Modifier mon pseudo</h3>
+            <input type="text" id="new-pseudo-input" placeholder="Nouveau pseudo" maxlength="20" style="margin-bottom:14px;width:90%">
+            <button id="confirm-pseudo-btn" class="profile-btn">Valider</button>
+        </div>
+    </div>
+
+    <!-- Container pour les toasts -->
+    <div id="toast-container"></div>
+
+    <!-- Modale d'échange UNIQUE -->
+    <div id="trade-modal" class="modal" style="display:none;">
+      <div class="modal-content" id="trade-modal-content" style="max-width:700px;">
+        <span class="close" id="close-trade-modal">&times;</span>
+        <h3 id="trade-title"></h3>
+        <div class="trade-flex" style="display:flex;gap:30px;justify-content:center;margin-top:24px;">
+          <!-- Joueur courant -->
+          <div style="flex:1;min-width:240px;">
+            <div><b id="trade-your-pseudo"></b> <span style="color:#aaa;font-size:0.93em;">(toi)</span></div>
+            <div id="trade-your-cards" class="trade-cards-list"></div>
+            <div style="margin:8px 0;">
+              <label>Pièces :</label>
+              <input type="number" id="trade-your-coins" value="0" min="0" style="width:70px;">
+            </div>
+            <!-- Drag&drop (optionnel, masqué si inutilisé) -->
+            <div id="trade-your-offer" class="trade-offer-zone" 
+              style="border:2px dashed #85bafc;border-radius:10px;min-height:54px;padding:8px;margin-bottom:8px;background:#f5f9ff;display:none;">
+              Glisse ici tes cartes à échanger
+            </div>
+          </div>
+          <!-- Joueur adverse -->
+          <div style="flex:1;min-width:240px;">
+            <div><b id="trade-other-pseudo"></b></div>
+<div id="trade-other-cards" class="trade-cards-list"></div>
+<div style="margin:8px 0;">
+  <label>Pièces :</label>
+  <span id="trade-other-coins">0</span>
+</div>
+            <div id="trade-other-offer" class="trade-offer-zone" 
+              style="border:2px dashed #ddd;border-radius:10px;min-height:54px;padding:8px;margin-bottom:8px;background:#fafafc;display:none;">
+              Attente de sélection…
+            </div>
+          </div>
+        </div>
+        <div class="trade-actions" style="text-align:center;margin-top:18px;">
+          <button id="trade-accept-btn" class="profile-btn" style="background:#2ecc40;font-size:1.09em;">Accepter l'échange</button>
+          <button id="trade-cancel-btn" class="profile-btn" style="background:#e74c3c;font-size:1.09em;margin-left:20px;">Annuler</button>
+          <div id="trade-status-msg" style="margin-top:13px;color:#7b9acc;font-size:1.01em;"></div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="profil.js"></script>
+    <script type="module" src="header.js"></script>
+</body>
+</html>
