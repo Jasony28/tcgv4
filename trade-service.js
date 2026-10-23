@@ -1,0 +1,143 @@
+// Fichier: trade-service.js — amis et échanges entre amis (sans interface, testable)
+import {
+    collection, query, where, getDocs, doc, getDoc, updateDoc, addDoc,
+    runTransaction, increment, arrayUnion, arrayRemove, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+import { db } from './firebase-config.js';
+
+export const BOOSTER_TYPES = ['classic', 'v2', 'v3', 'legendary'];
+export const EMPTY_OFFER = () => ({ cards: {}, coins: 0, boosters: { classic: 0, v2: 0, v3: 0, legendary: 0 } });
+
+// ---------------- AMIS ----------------
+
+/**
+ * Envoie une demande d'ami par pseudo. Si l'autre joueur m'avait déjà envoyé une demande,
+ * on devient amis directement.
+ * @returns {Promise<{status:'sent'|'accepted', friendUid:string, pseudo:string}>}
+ */
+export async function sendFriendRequest(me, rawPseudo) {
+    const pseudo = (rawPseudo || '').trim();
+    if (!pseudo) throw new Error("Entre un pseudo.");
+    const snap = await getDocs(query(collection(db, "users"), where("pseudo", "==", pseudo)));
+    if (snap.empty) throw new Error("Aucun joueur trouvé avec ce pseudo (attention aux majuscules).");
+    const friendDoc = snap.docs[0];
+    const friendUid = friendDoc.id;
+    if (friendUid === me.uid) throw new Error("Impossible de s'ajouter soi-même !");
+
+    const meSnap = await getDoc(doc(db, "users", me.uid));
+    const myData = meSnap.data() || {};
+    if ((myData.friends || []).includes(friendUid)) throw new Error("Ce joueur est déjà ton ami !");
+
+    // Il m'a déjà demandé : on accepte directement
+    if ((myData.friendRequests || []).includes(friendUid)) {
+        await acceptFriendRequest(me.uid, friendUid);
+        return { status: 'accepted', friendUid, pseudo };
+    }
+    if ((friendDoc.data().friendRequests || []).includes(me.uid)) throw new Error("Demande déjà envoyée, en attente d'acceptation.");
+
+    await updateDoc(doc(db, "users", friendUid), { friendRequests: arrayUnion(me.uid) });
+    return { status: 'sent', friendUid, pseudo };
+}
+
+export async function acceptFriendRequest(myUid, requesterUid) {
+    await updateDoc(doc(db, "users", myUid), { friends: arrayUnion(requesterUid), friendRequests: arrayRemove(requesterUid) });
+    // On nettoie aussi une éventuelle demande croisée de l'autre côté
+    await updateDoc(doc(db, "users", requesterUid), { friends: arrayUnion(myUid), friendRequests: arrayRemove(myUid) });
+}
+
+export async function refuseFriendRequest(myUid, requesterUid) {
+    await updateDoc(doc(db, "users", myUid), { friendRequests: arrayRemove(requesterUid) });
+}
+
+export async function removeFriend(myUid, friendUid) {
+    await updateDoc(doc(db, "users", myUid), { friends: arrayRemove(friendUid) });
+    await updateDoc(doc(db, "users", friendUid), { friends: arrayRemove(myUid) });
+}
+
+// ---------------- ÉCHANGES ENTRE AMIS ----------------
+
+export async function createTradeRequest(myUid, friendUid) {
+    const meSnap = await getDoc(doc(db, "users", myUid));
+    if (!(meSnap.data()?.friends || []).includes(friendUid)) throw new Error("Tu ne peux échanger qu'avec tes amis.");
+    const ref = await addDoc(collection(db, "tradeRequests"), {
+        from: myUid,
+        to: friendUid,
+        status: "pending",
+        createdAt: serverTimestamp(),
+        offerA: EMPTY_OFFER(),
+        offerB: EMPTY_OFFER(),
+        readyA: false,
+        readyB: false
+    });
+    return ref.id;
+}
+
+/** Offre propre (valeurs entières >= 0, champs manquants complétés). */
+export function normalizeOffer(offer) {
+    const out = EMPTY_OFFER();
+    for (const [id, n] of Object.entries(offer?.cards || {})) {
+        const q = Math.floor(n);
+        if (q > 0) out.cards[id] = q;
+    }
+    out.coins = Math.max(0, Math.floor(offer?.coins || 0));
+    for (const t of BOOSTER_TYPES) out.boosters[t] = Math.max(0, Math.floor(offer?.boosters?.[t] || 0));
+    return out;
+}
+
+/** Vérifie qu'un joueur possède ce qu'il propose. Pour les cartes, il doit en garder une. Renvoie un message ou null. */
+export function checkOfferAffordable(userData, offer, label = 'Tu') {
+    const o = normalizeOffer(offer);
+    for (const [id, q] of Object.entries(o.cards)) {
+        if ((userData.collection?.[id]?.quantity || 0) - 1 < q) return `${label} n'a plus assez de doubles pour une carte.`;
+    }
+    for (const t of BOOSTER_TYPES) {
+        if ((userData.boosterInventory?.[t] || 0) < o.boosters[t]) return `${label} n'a plus assez de boosters.`;
+    }
+    if ((userData.coins || 0) < o.coins) return `${label} n'a plus assez de pièces.`;
+    return null;
+}
+
+/**
+ * Valide l'échange : les deux offres sont transférées en une seule transaction.
+ * Protégé contre la double validation (les deux joueurs qui cliquent en même temps).
+ */
+export async function validateTrade(tradeId) {
+    const tradeRef = doc(db, "tradeRequests", tradeId);
+    await runTransaction(db, async (transaction) => {
+        const tradeSnap = await transaction.get(tradeRef);
+        if (!tradeSnap.exists()) throw new Error("Échange introuvable.");
+        const trade = tradeSnap.data();
+        if (trade.status !== 'accepted') throw new Error(trade.status === 'completed' ? "Échange déjà effectué." : "Cet échange n'est plus actif.");
+        if (!trade.readyA || !trade.readyB) throw new Error("Les deux joueurs doivent être prêts.");
+
+        const userARef = doc(db, "users", trade.from);
+        const userBRef = doc(db, "users", trade.to);
+        const userASnap = await transaction.get(userARef);
+        const userBSnap = await transaction.get(userBRef);
+        if (!userASnap.exists() || !userBSnap.exists()) throw new Error("Un des joueurs n'existe plus.");
+
+        const offerA = normalizeOffer(trade.offerA);
+        const offerB = normalizeOffer(trade.offerB);
+        const errA = checkOfferAffordable(userASnap.data(), offerA, userASnap.data().pseudo || 'Le joueur A');
+        const errB = checkOfferAffordable(userBSnap.data(), offerB, userBSnap.data().pseudo || 'Le joueur B');
+        if (errA || errB) throw new Error(errA || errB);
+
+        // Variation nette pour A (B reçoit l'inverse) : évite les écritures qui s'écrasent
+        const delta = {};
+        const add = (field, n) => { delta[field] = (delta[field] || 0) + n; };
+        for (const [id, q] of Object.entries(offerA.cards)) add(`collection.${id}.quantity`, -q);
+        for (const [id, q] of Object.entries(offerB.cards)) add(`collection.${id}.quantity`, q);
+        for (const t of BOOSTER_TYPES) add(`boosterInventory.${t}`, offerB.boosters[t] - offerA.boosters[t]);
+        add('coins', offerB.coins - offerA.coins);
+
+        const updatesA = {}, updatesB = {};
+        for (const [field, d] of Object.entries(delta)) {
+            if (d === 0) continue;
+            updatesA[field] = increment(d);
+            updatesB[field] = increment(-d);
+        }
+        if (Object.keys(updatesA).length) transaction.update(userARef, updatesA);
+        if (Object.keys(updatesB).length) transaction.update(userBRef, updatesB);
+        transaction.update(tradeRef, { status: "completed" });
+    });
+}

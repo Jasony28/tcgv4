@@ -1,6 +1,6 @@
 // Fichier: auth-manager.js (Version centralisée et finale)
 import { onAuthStateChanged, signOut, getAuth } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
-import { doc, getDoc, onSnapshot, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+import { doc, getDoc, onSnapshot, updateDoc, serverTimestamp, collection, query, where } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
 import { updateQuestProgress } from './quest-manager.js';
 import { getAchievementsStatus } from './achievements-config.js';
@@ -14,18 +14,44 @@ const auth = getAuth();
  */
 function checkAchievements(uid, userData) {
     const ready = getAchievementsStatus(userData).filter(a => a.unlocked && !a.claimed);
-    document.getElementById('profil-link')?.classList.toggle('has-dot', ready.length > 0);
+    const requests = userData.friendRequests || [];
+    // Pastille sur le profil : succès à réclamer OU demande d'ami en attente
+    document.getElementById('profil-link')?.classList.toggle('has-dot', ready.length > 0 || requests.length > 0);
 
-    const key = `ach-notified-${uid}`;
-    let notified = [];
-    try { notified = JSON.parse(localStorage.getItem(key) || '[]'); } catch { /* stockage indisponible */ }
-    const fresh = ready.filter(a => !notified.includes(a.id));
-    for (const a of fresh) {
+    const fresh = notifyOnce(`ach-notified-${uid}`, ready.map(a => a.id));
+    for (const a of ready.filter(x => fresh.includes(x.id))) {
         showToast('success', `🏅 Succès débloqué : ${a.title} ! Réclame ta récompense dans ton profil.`, 5000);
     }
-    if (fresh.length) {
-        try { localStorage.setItem(key, JSON.stringify([...notified, ...fresh.map(a => a.id)])); } catch { /* ignoré */ }
+    if (notifyOnce(`fr-notified-${uid}`, requests).length) {
+        showToast('info', `👥 Nouvelle demande d'ami ! Va sur ton profil pour l'accepter.`, 5000);
     }
+}
+
+/** Renvoie les identifiants pas encore signalés sur cet appareil, et les mémorise. */
+function notifyOnce(key, ids) {
+    let notified = [];
+    try { notified = JSON.parse(localStorage.getItem(key) || '[]'); } catch { /* stockage indisponible */ }
+    const fresh = ids.filter(id => !notified.includes(id));
+    if (fresh.length) {
+        try { localStorage.setItem(key, JSON.stringify([...notified, ...fresh])); } catch { /* ignoré */ }
+    }
+    return fresh;
+}
+
+/** Hors de la page profil : prévient quand un ami propose un échange. */
+function listenToTradeInvites(uid) {
+    if (location.pathname.endsWith('profil.html')) return; // le profil affiche déjà sa propre fenêtre
+    const q = query(collection(db, "tradeRequests"), where("to", "==", uid), where("status", "==", "pending"));
+    onSnapshot(q, (snap) => {
+        snap.docChanges().forEach(async (change) => {
+            if (change.type !== 'added') return;
+            const data = change.doc.data();
+            const created = data.createdAt?.toDate?.().getTime() || Date.now();
+            if (Date.now() - created > 60 * 1000) return;
+            const from = await getDoc(doc(db, "users", data.from)).catch(() => null);
+            showToast('info', `🔄 ${from?.data()?.pseudo || 'Un ami'} veut échanger avec toi ! Ouvre ton profil (1 min).`, 6000);
+        });
+    }, () => { /* index manquant ou hors ligne : pas grave */ });
 }
 
 // Un seul écouteur temps réel par page (protectPage peut être appelée plusieurs fois)
@@ -72,6 +98,7 @@ function updateHeaderUI(userData) {
  */
 function listenToUserData(uid) {
     if (userDataUnsubscribe) return;
+    listenToTradeInvites(uid);
     const userDocRef = doc(db, "users", uid);
     // onSnapshot met à jour l'UI automatiquement dès qu'une donnée change dans Firestore
     userDataUnsubscribe = onSnapshot(userDocRef, (doc) => {

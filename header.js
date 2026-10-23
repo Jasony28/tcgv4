@@ -34,6 +34,7 @@ const tabbarHTML = `
         <div class="dropdown-menu" id="collection-dropdown-menu">
             <a href="collection.html?set=v1" class="dropdown-item">Collection V1</a>
             <a href="collection.html?set=v2" class="dropdown-item">Collection V2</a>
+            <a href="collection.html?set=v3" class="dropdown-item">Collection V3 <span class="soon-tag">Nouveau</span></a>
         </div>
     </div>
     <a href="marche.html" class="nav-link" id="nav-marche">${icons.market}<span>Marché</span></a>

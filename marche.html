@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Marché - JWBnDr</title>
+    <title>Hôtel des Ventes - JWBnDr</title>
     <link rel="stylesheet" href="main.css">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0a1224">
@@ -16,47 +16,59 @@
 </head>
 <body>
     <header class="main-header"></header>
-    <main class="collection-container">
-        <h2>Marché des Enchères</h2>
-        <p class="page-subtitle">Mise sur les cartes des autres joueurs</p>
-        <p id="no-auctions-message" style="display: none;">Il n'y a aucune enchère pour le moment.</p>
-        <div id="auctions-grid" class="card-grid"></div>
-    </main>
-    <div id="bid-modal" class="overlay" style="display:none;">
-    <div class="modal-content">
-        <span class="close-btn">&times;</span>
-        <h3><span id="modal-card-name"></span></h3>
-        <div id="modal-card-preview"></div>
-        <p>Vendeur : <span id="modal-seller-pseudo"></span></p>
-        <p>Prix actuel : <strong id="modal-current-price"></strong> pièces</p>
-        <p>Temps restant : <span id="modal-time-left"></span></p>
+    <main class="market-page">
+        <h2 class="page-title">Hôtel des Ventes</h2>
+        <p class="page-subtitle">Enchères en pièces ou échanges contre des cartes</p>
 
-        <div id="modal-actions-container">
-            <div class="bid-form" style="display: none;">
-                <input type="number" id="bid-amount-input" placeholder="Votre mise">
-                <button id="submit-bid-button">Placer l'enchère</button>
-            </div>
-            <button id="cancel-auction-button" class="button-secondary" style="display: none;">Annuler mon enchère</button>
+        <button id="create-listing-button" class="create-listing-button">+ Créer une annonce</button>
+
+        <div class="filter-chips" id="market-tabs">
+            <button class="chip active" data-tab="all">Tout</button>
+            <button class="chip" data-tab="auction">💰 Enchères</button>
+            <button class="chip" data-tab="trade">🔄 Échanges</button>
+            <button class="chip" data-tab="mine">Mes annonces</button>
+        </div>
+        <div class="market-toolbar">
+            <input type="search" id="market-search" placeholder="Rechercher une carte, un booster…">
+            <select id="market-sort" aria-label="Trier">
+                <option value="ending">Fin proche</option>
+                <option value="recent">Plus récentes</option>
+                <option value="price-asc">Prix croissant</option>
+                <option value="price-desc">Prix décroissant</option>
+            </select>
         </div>
 
-        <p id="modal-error-message" class="error"></p>
+        <p id="market-empty" class="market-empty" hidden></p>
+        <div id="market-grid" class="market-grid"></div>
+    </main>
 
-        <div class="bid-history">
-            <h4>Historique des enchères</h4>
-            <ul id="bid-history-list"></ul>
+    <!-- Détail d'une annonce -->
+    <div id="listing-modal" class="overlay" style="display:none;">
+        <div class="modal-content">
+            <span class="close-btn" id="listing-modal-close">&times;</span>
+            <div id="listing-modal-body"></div>
         </div>
     </div>
-</div>
-<div id="toast-container"></div>
-<!-- Modale de confirmation universelle pour showConfirmDialog -->
-<div id="custom-modal" class="modal" style="display:none;">
-  <div class="modal-content">
-    <span id="custom-modal-close" class="close">&times;</span>
-    <h3 id="custom-modal-title"></h3>
-    <p id="custom-modal-message"></p>
-    <div id="custom-modal-actions"></div>
-  </div>
-</div>
+
+    <!-- Création d'une annonce -->
+    <div id="create-modal" class="overlay" style="display:none;">
+        <div class="modal-content create-modal-content">
+            <span class="close-btn" id="create-modal-close">&times;</span>
+            <h3>Nouvelle annonce</h3>
+            <div id="create-body"></div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+    <!-- Modale de confirmation universelle pour showConfirmDialog -->
+    <div id="custom-modal" style="display:none;">
+      <div class="modal-content">
+        <span class="close-btn" id="custom-modal-close">&times;</span>
+        <div id="custom-modal-title"></div>
+        <div id="custom-modal-message"></div>
+        <div id="custom-modal-actions"></div>
+      </div>
+    </div>
 
     <script type="module" src="header.js"></script>
     <script type="module" src="marche.js"></script>

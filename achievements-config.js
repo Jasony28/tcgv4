@@ -2,10 +2,13 @@
 // Modifie les récompenses ici. Une récompense = { coins, classic, v2, legendary } (boosters).
 import { allCards } from './cards.js';
 import { allCardsV2 } from './cards1.js';
+import { allCardsV3, V3_RELEASED } from './cards-v3.js';
 
 const SETS = {
     v1: { label: 'V1', cards: allCards },
-    v2: { label: 'V2', cards: allCardsV2 }
+    v2: { label: 'V2', cards: allCardsV2 },
+    // Les succès V3 apparaissent à la sortie de la collection
+    ...(V3_RELEASED ? { v3: { label: 'V3', cards: allCardsV3 } } : {})
 };
 
 const RARITIES = [
@@ -37,6 +40,13 @@ const REWARDS = {
         epique: { coins: 30, v2: 1 },
         legendaire: { coins: 150, legendary: 1 },
         album: { coins: 300, v2: 2, legendary: 1 }
+    },
+    v3: {
+        commune: { coins: 50, v3: 1 },
+        rare: { coins: 80, v3: 1 },
+        epique: { coins: 100, legendary: 1 },
+        legendaire: { coins: 200, legendary: 2 },
+        album: { coins: 500, v3: 3, legendary: 2 }
     }
 };
 
@@ -83,6 +93,7 @@ export function rewardText(reward) {
     if (reward.coins) parts.push(`+${reward.coins} pièces`);
     if (reward.classic) parts.push(`${reward.classic} Booster Classique`);
     if (reward.v2) parts.push(`${reward.v2} Booster V2`);
+    if (reward.v3) parts.push(`${reward.v3} Booster V3`);
     if (reward.legendary) parts.push(`${reward.legendary} Booster${reward.legendary > 1 ? 's' : ''} Légendaire${reward.legendary > 1 ? 's' : ''}`);
     return parts.join(' · ');
 }

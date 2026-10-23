@@ -26,6 +26,7 @@ export async function claimAchievement(uid, achievementId) {
         if (r.coins) updates.coins = increment(r.coins);
         if (r.classic) updates['boosterInventory.classic'] = increment(r.classic);
         if (r.v2) updates['boosterInventory.v2'] = increment(r.v2);
+        if (r.v3) updates['boosterInventory.v3'] = increment(r.v3);
         if (r.legendary) updates['boosterInventory.legendary'] = increment(r.legendary);
         transaction.update(userRef, updates);
     });

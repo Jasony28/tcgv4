@@ -48,47 +48,36 @@ onSchedule('every 5 minutes', async (event) => {
 
       const sellerRef = db.collection('users').doc(auction.sellerId);
       const sellerSnap = await transaction.get(sellerRef);
-      const cardPath = `collection.${auction.cardId}.quantity`;
+      const buyerRef = auction.highestBidderId ?
+        db.collection('users').doc(auction.highestBidderId) : null;
+      const buyerSnap = buyerRef ? await transaction.get(buyerRef) : null;
 
-      if (auction.highestBidderId) {
-        // --- CAS 1: VENTE RÉUSSIE ---
-        const bidLog =
-          `Enchère ${doc.id} gagnée par ` +
-          `${auction.highestBidderPseudo}`;
-        console.log(bidLog);
-        const buyerRef =
-          db.collection('users').doc(auction.highestBidderId);
-        const buyerSnap = await transaction.get(buyerRef);
+      // Objet de l'annonce : carte ou booster (anciennes annonces :
+      // cardId et quantity à la racine). Même logique que
+      // market-service.js côté site.
+      const item = auction.item ||
+        {type: 'card', cardId: auction.cardId,
+          quantity: auction.quantity || 1};
+      const itemPath = item.type === 'booster' ?
+        `boosterInventory.${item.boosterType}` :
+        `collection.${item.cardId}.quantity`;
+      const inc = admin.firestore.FieldValue.increment;
 
-        if (buyerSnap.exists) {
-          // 1. Donner la carte au gagnant
-          transaction.update(buyerRef, {
-            [cardPath]: admin.firestore.FieldValue.increment(
-              auction.quantity
-            ),
-          });
-        }
-
-        // 2. Donner l'argent au vendeur
+      if (buyerSnap && buyerSnap.exists) {
+        // --- CAS 1: ENCHÈRE GAGNÉE ---
+        console.log(`Annonce ${doc.id} gagnée par ` +
+          `${auction.highestBidderPseudo}`);
+        transaction.update(buyerRef, {[itemPath]: inc(item.quantity)});
         if (sellerSnap.exists) {
-          transaction.update(sellerRef, {
-            coins: admin.firestore.FieldValue.increment(
-              auction.currentPrice
-            ),
-          });
+          transaction.update(sellerRef,
+              {coins: inc(auction.currentPrice)});
         }
       } else {
-        // --- CAS 2: VENTE ÉCHOUÉE (pas d'enchérisseur) ---
-        console.log(
-          `Enchère ${doc.id} expirée sans enchérisseur.`
-        );
-        // 1. Rendre la carte au vendeur
+        // --- CAS 2: PERSONNE (ou échange non conclu) ---
+        // L'objet revient au vendeur.
+        console.log(`Annonce ${doc.id} expirée sans preneur.`);
         if (sellerSnap.exists) {
-          transaction.update(sellerRef, {
-            [cardPath]: admin.firestore.FieldValue.increment(
-              auction.quantity
-            ),
-          });
+          transaction.update(sellerRef, {[itemPath]: inc(item.quantity)});
         }
       }
 

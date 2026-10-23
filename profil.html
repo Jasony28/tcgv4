@@ -28,8 +28,11 @@
             <button id="edit-pseudo-btn" class="profile-btn ghost">Modifier mon pseudo</button>
 
             <!-- Gestion des amis -->
+            <div class="add-friend-row">
+                <input type="text" id="friend-pseudo-input" placeholder="Pseudo de ton ami" maxlength="20" autocomplete="off">
+                <button id="add-friend-btn" class="profile-btn primary">Ajouter</button>
+            </div>
             <div class="profile-actions">
-                <button id="add-friend-btn" class="profile-btn primary full">+ Ajouter un ami</button>
                 <button id="friends-list-btn" class="profile-btn">Mes amis</button>
                 <button id="friend-requests-btn" class="profile-btn">Demandes</button>
             </div>
@@ -85,6 +88,24 @@
             <input type="text" id="new-pseudo-input" placeholder="Nouveau pseudo" maxlength="20">
             <button id="confirm-pseudo-btn" class="profile-btn primary">Valider</button>
         </div>
+    </div>
+
+    <!-- Profil d'un ami : stats, collection, succès -->
+    <div id="friend-modal" class="modal" style="display:none;">
+        <div class="modal-content friend-modal-content">
+            <span class="close" id="friend-modal-close">&times;</span>
+            <div id="friend-modal-body"></div>
+        </div>
+    </div>
+
+    <!-- Confirmation (retirer un ami…) -->
+    <div id="custom-modal" style="display:none;">
+      <div class="modal-content">
+        <span class="close-btn" id="custom-modal-close">&times;</span>
+        <div id="custom-modal-title"></div>
+        <div id="custom-modal-message"></div>
+        <div id="custom-modal-actions"></div>
+      </div>
     </div>
 
     <!-- Container pour les toasts -->

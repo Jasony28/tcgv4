@@ -3,6 +3,7 @@ import { db } from './firebase-config.js';
 import { protectPage } from './auth-manager.js';
 import { allCards } from './cards.js';
 import { allCardsV2 } from './cards1.js';
+import { allCardsV3, V3_RELEASED } from './cards-v3.js';
 import { updateQuestProgress } from './quest-manager.js';
 import { updateUserStats } from './stats-manager.js';
 import { showToast } from './toast.js';
@@ -122,6 +123,21 @@ function displayAvailableBoosters() {
     } else {
         v2Area.style.display = 'none';
     }
+
+    // --- V3 (seulement une fois la collection sortie) ---
+    const v3Boosters = V3_RELEASED ? (userData.boosterInventory?.v3 || 0) : 0;
+    const v3Area = document.getElementById('v3-booster-area');
+    const oldV3 = document.getElementById('v3-booster-opener');
+    const newV3 = oldV3.cloneNode(true);
+    oldV3.parentNode.replaceChild(newV3, oldV3);
+
+    if (v3Boosters > 0) {
+        v3Area.style.display = 'block';
+        newV3.querySelector('#v3-booster-count').textContent = `x${v3Boosters}`;
+        newV3.addEventListener('click', () => handleOpenBooster('v3'), { once: true });
+    } else {
+        v3Area.style.display = 'none';
+    }
 }
 
 
@@ -135,6 +151,8 @@ async function openBooster(boosterType) {
 
     if (drawBoosterType === 'legendary') {
         drawnCards = drawLegendaryBoosterCards();
+    } else if (drawBoosterType === 'v3') {
+        drawnCards = drawClassicBoosterCards(allCardsV3);
     } else if (drawBoosterType === 'v2') {
         drawnCards = drawClassicBoosterCards(allCardsV2);
     } else {
@@ -336,6 +354,10 @@ async function updateUserAfterBoosterOpen(boosterType, drawnCards) {
             } else if (boosterType === 'legendary') {
                 if ((currentData.boosterInventory?.legendary || 0) < 1) throw new Error("Pas de booster légendaire à ouvrir.");
                 updates['boosterInventory.legendary'] = increment(-1);
+            } else if (boosterType === 'v3') {
+                if (!V3_RELEASED) throw new Error("La collection V3 n'est pas encore sortie.");
+                if ((currentData.boosterInventory?.v3 || 0) < 1) throw new Error("Pas de booster V3 à ouvrir.");
+                updates['boosterInventory.v3'] = increment(-1);
             } else if (boosterType === 'v2') {
                 if ((currentData.boosterInventory?.v2 || 0) < 1) throw new Error("Pas de booster V2 à ouvrir.");
                 updates['boosterInventory.v2'] = increment(-1);

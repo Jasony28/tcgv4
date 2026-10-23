@@ -1,10 +1,11 @@
 // Fichier: shop-config.js — réglages de la boutique (modifie les chiffres ici pour équilibrer)
 import { allCards } from './cards.js';
 import { allCardsV2 } from './cards1.js';
+import { allCardsV3Released, V3_RELEASED } from './cards-v3.js';
 import { createSeededRandom } from './daily-utils.js';
 
-// Toutes les cartes (V1 + V2) : la boutique est le seul moyen d'obtenir les cartes V2 hors échanges
-export const SHOP_CARD_POOL = [...allCards, ...allCardsV2];
+// Toutes les cartes (V1 + V2, + V3 à sa sortie) : la boutique vend aussi les cartes des nouvelles collections
+export const SHOP_CARD_POOL = [...allCards, ...allCardsV2, ...allCardsV3Released];
 
 export const SHOP_SLOTS = 3;
 
@@ -25,6 +26,7 @@ export const SHOP_CARD_PRICES = { 'Commune': 10, 'Rare': 25, 'epique': 60, 'Lég
 export const SHOP_BOOSTERS = {
     classic: { name: 'Booster Classique', price: 20, dailyLimit: 3, description: '3 communes, 1 rare, 1 carte bonus' },
     v2: { name: 'Booster V2', price: 30, dailyLimit: 2, description: 'Cartes de la collection V2' },
+    ...(V3_RELEASED ? { v3: { name: 'Booster V3', price: 35, dailyLimit: 2, description: 'Cartes de la collection V3' } } : {}),
     legendary: { name: 'Booster Légendaire', price: 90, dailyLimit: 1, description: '1 légendaire garantie' }
 };
 

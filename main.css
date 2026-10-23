@@ -357,6 +357,7 @@ button:disabled { opacity: .55; cursor: not-allowed; transform: none; }
 .game-container,
 .season-pass-page,
 .shop-page,
+.market-page,
 .profil-container,
 .profile-block {
     width: 100%;
@@ -553,8 +554,6 @@ button:disabled { opacity: .55; cursor: not-allowed; transform: none; }
 /* ----------------------------------------
    8. Marché
    ---------------------------------------- */
-#auctions-grid { grid-template-columns: repeat(2, 1fr); gap: 14px; }
-#auctions-grid .card { padding-bottom: 0; }
 .auction-info-overlay {
     position: absolute;
     left: 4%;
@@ -1410,6 +1409,198 @@ button:disabled { opacity: .55; cursor: not-allowed; transform: none; }
 .rarity-progress.done { color: #3d2600; background: linear-gradient(180deg, var(--gold-light), var(--gold)); border-color: transparent; }
 
 /* ----------------------------------------
+   12h. Hôtel des Ventes
+   ---------------------------------------- */
+.create-listing-button { margin: 4px 0 14px; }
+.market-toolbar { display: flex; gap: 8px; margin: 10px 0 14px; }
+.market-toolbar input { margin: 0; flex: 1; min-width: 0; }
+.market-toolbar select {
+    flex-shrink: 0;
+    width: auto;
+    padding: 0 10px;
+    font: inherit;
+    font-size: .85rem;
+    color: var(--text);
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+}
+.market-empty { text-align: center; color: var(--text-muted); padding: 34px 16px; border: 1px dashed var(--border-strong); border-radius: var(--radius); }
+.market-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.listing-tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 30px 8px 10px;
+    border-radius: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: transform .15s;
+}
+.listing-tile:active { transform: scale(.98); }
+.listing-tile.trade { border-color: rgba(61, 155, 255, 0.4); }
+.listing-tile.mine { border-style: dashed; }
+.listing-tile.can-fulfill { border-color: var(--green); box-shadow: 0 0 16px rgba(47, 212, 128, 0.25); }
+.listing-tile .card, .listing-tile .booster-visual { width: 78%; margin: 0 auto; }
+.listing-tile .ownership-badge { top: 34px; }
+.listing-type-chip {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: .68rem;
+    font-weight: 800;
+    color: var(--gold-light);
+    background: rgba(0, 0, 0, 0.35);
+}
+.listing-tile.trade .listing-type-chip { color: #9ccaff; }
+.listing-type-chip.static { position: static; display: inline-block; margin-bottom: 4px; }
+.listing-info { display: flex; flex-direction: column; gap: 3px; text-align: center; }
+.listing-name { font-size: .85rem; line-height: 1.2; }
+.listing-price { display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-weight: 800; color: var(--gold-light); }
+.listing-price .coin-icon { width: 16px; height: 16px; }
+.listing-wanted { display: flex; align-items: center; justify-content: center; gap: 3px; font-size: .72rem; color: var(--text-muted); flex-wrap: wrap; }
+.listing-wanted img { width: 20px; aspect-ratio: 5 / 7; object-fit: contain; }
+.listing-meta { font-size: .7rem; color: var(--text-muted); }
+.fulfil-hint { font-size: .7rem; font-weight: 800; color: var(--green); }
+.booster-visual { position: relative; aspect-ratio: 5 / 7; display: grid; place-items: center; }
+.booster-visual img { height: 100%; width: auto; filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.5)); }
+.booster-visual.v2 img, .booster-thumb.v2 { filter: hue-rotate(160deg) saturate(1.3) drop-shadow(0 0 10px rgba(61, 155, 255, 0.6)); }
+.booster-visual.legendary img, .booster-thumb.legendary { filter: hue-rotate(35deg) saturate(1.6) brightness(1.1) drop-shadow(0 0 10px rgba(255, 194, 61, 0.7)); }
+.booster-visual .v2-tag { top: 6px; left: 0; font-size: .7rem; }
+
+/* Détail d'une annonce */
+.listing-detail-head { display: flex; gap: 14px; align-items: center; text-align: left; margin-bottom: 14px; }
+.listing-detail-head .detail-visual { width: 110px; flex-shrink: 0; cursor: default; }
+.listing-detail-info h3 { margin: 4px 0; font-size: 1.3rem; }
+.listing-detail-info h3 small { color: var(--text-muted); font-size: .9rem; }
+.listing-detail-info p { margin: 4px 0; font-size: .85rem; color: var(--text-muted); }
+.listing-detail-info p strong { color: var(--text); }
+.listing-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.listing-stats > div { display: flex; flex-direction: column; gap: 2px; padding: 10px; border-radius: 12px; background: rgba(0, 0, 0, 0.25); }
+.listing-stats span { font-size: .72rem; color: var(--text-muted); }
+.listing-stats strong { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.listing-stats .gold { color: var(--gold-light); font-size: 1.2rem; }
+.quick-bids { display: flex; gap: 8px; justify-content: center; margin-top: 8px; }
+.hint { font-size: .78rem; color: var(--text-muted); margin: 8px 0 0; }
+.trade-explain { font-size: .9rem; color: var(--text-muted); margin: 0 0 10px; }
+.wanted-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.wanted-card { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 6px; border-radius: 12px; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border); }
+.wanted-card.have { border-color: var(--green); }
+.wanted-card .card { width: 100%; cursor: default; }
+.wanted-name { font-size: .72rem; font-weight: 700; line-height: 1.15; }
+.wanted-have { font-size: .66rem; color: var(--text-muted); }
+.wanted-card.have .wanted-have { color: var(--green); font-weight: 700; }
+.give-button { padding: 7px 4px; font-size: .78rem; }
+#cancel-listing-button { margin-top: 12px; }
+
+/* Création d'une annonce */
+.create-modal-content { text-align: left; }
+.create-modal-content h3 { text-align: center; }
+.form-step { margin-bottom: 18px; }
+.step-label { display: block; font-weight: 800; margin-bottom: 8px; color: var(--gold-light); }
+.field-label { display: block; font-size: .85rem; color: var(--text-muted); margin: 10px 0 6px; }
+.segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 4px; border-radius: 14px; background: rgba(0, 0, 0, 0.3); margin-bottom: 10px; }
+.segmented button { padding: 10px; font-size: .88rem; background: transparent; box-shadow: none; color: var(--text-muted); }
+.segmented button.active { background: var(--surface-3); color: var(--text); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
+.picker-search { margin-bottom: 8px; padding: 10px 12px; }
+.pick-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; max-height: 236px; overflow-y: auto; padding: 2px; }
+.pick-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.pick-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 4px;
+    border-radius: 10px;
+    background: var(--surface);
+    border: 2px solid transparent;
+    box-shadow: none;
+    color: var(--text);
+    font-weight: 600;
+}
+.pick-tile img { width: 100%; aspect-ratio: 5 / 7; object-fit: contain; }
+.pick-tile.booster img { width: 70%; }
+.pick-tile.booster.v2 img { filter: hue-rotate(160deg) saturate(1.3); }
+.pick-tile.booster.legendary img { filter: hue-rotate(35deg) saturate(1.6) brightness(1.1); }
+.pick-tile span { font-size: .62rem; line-height: 1.1; text-align: center; }
+.pick-tile small { font-size: .6rem; color: var(--text-muted); }
+.pick-tile small b { color: var(--gold-light); }
+.pick-tile.selected { border-color: var(--gold); background: rgba(255, 194, 61, 0.15); }
+.pick-tile:active { transform: scale(.96); box-shadow: none; }
+.qty-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: .9rem; flex-wrap: wrap; }
+.qty-row small { color: var(--text-muted); }
+.stepper { display: flex; align-items: center; gap: 10px; }
+.stepper button { width: 34px; height: 34px; padding: 0; border-radius: 10px; background: var(--surface-3); box-shadow: 0 3px 0 #0b1328; }
+.filter-chips.no-bleed { margin: 0; padding: 0; }
+#publish-button { margin-top: 4px; }
+
+/* ----------------------------------------
+   12i. Amis
+   ---------------------------------------- */
+.add-friend-row { display: flex; gap: 8px; margin-top: 14px; }
+.add-friend-row input { margin: 0; flex: 1; min-width: 0; }
+.add-friend-row .profile-btn { width: auto; flex-shrink: 0; }
+.profile-actions .profile-btn.active { background: linear-gradient(180deg, var(--gold-light), var(--gold)); color: #3d2600; box-shadow: 0 4px 0 #a86a00; }
+.count-pill { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 4px; border-radius: 999px; font-size: .75rem; background: rgba(0, 0, 0, 0.35); }
+.count-pill.alert { background: var(--red); color: #fff; }
+.friend-actions.three { grid-template-columns: 1fr 1fr 44px; }
+.profile-btn.small { padding: 8px; }
+.profile-avatar.small { width: 54px; height: 54px; font-size: 1.6rem; margin: 0; }
+.friend-modal-content { text-align: left; }
+.friend-profile-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.friend-profile-head h3 { margin: 0 0 2px; }
+.friend-modal-content .profile-badges { justify-content: flex-start; }
+.stats-grid.compact { grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+.stats-grid.compact .stat-item { padding: 10px 6px; }
+.stats-grid.compact .stat-value { font-size: 1.4rem; }
+.stats-grid.compact .stat-label { font-size: .68rem; }
+.stats-grid.compact .stat-item.full-width .stat-value { font-size: .9rem; }
+.album-progress { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.album-progress .progress-head { margin: 4px 0 0; }
+#friend-modal-trade { margin-top: 14px; }
+.trade-card-name { flex: 1; min-width: 0; font-size: .8rem; font-weight: 600; display: flex; flex-direction: column; }
+.trade-card-name small { color: var(--text-muted); font-weight: 500; }
+.booster-thumb { height: 40px; width: auto; }
+
+/* ----------------------------------------
+   12j. Collection V3
+   ---------------------------------------- */
+.v3-banner {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 520px;
+    margin: 4px auto 14px;
+    padding: 14px;
+    text-align: center;
+    border-radius: var(--radius);
+    background: linear-gradient(110deg, rgba(180, 92, 255, 0.3), rgba(61, 155, 255, 0.2));
+    border: 1px solid rgba(180, 92, 255, 0.5);
+}
+.v3-banner[hidden] { display: none; }
+.v3-banner span { font-size: .85rem; color: var(--text-muted); }
+.soon-tag {
+    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: .65rem;
+    font-weight: 800;
+    color: #fff;
+    background: var(--rarity-epique);
+}
+.v3-tag { background: linear-gradient(180deg, #c27bff, #7a2fd6); }
+#v3-booster-area { border-color: rgba(180, 92, 255, 0.5); }
+#v3-booster-opener img,
+.booster-item.v3 img,
+.booster-visual.v3 img,
+.booster-thumb.v3,
+.pick-tile.booster.v3 img { filter: hue-rotate(250deg) saturate(1.4) drop-shadow(0 0 12px rgba(180, 92, 255, 0.6)); }
+
+/* ----------------------------------------
    13. Animations
    ---------------------------------------- */
 @keyframes float {
@@ -1449,7 +1640,7 @@ button:disabled { opacity: .55; cursor: not-allowed; transform: none; }
    ---------------------------------------- */
 @media (min-width: 560px) {
     .card-grid { grid-template-columns: repeat(4, 1fr); gap: 16px; }
-    #auctions-grid { grid-template-columns: repeat(3, 1fr); }
+    .market-grid { grid-template-columns: repeat(3, 1fr); }
     .stats-grid { grid-template-columns: repeat(4, 1fr); }
     .friend-card-list { grid-template-columns: repeat(6, 1fr); }
 }
@@ -1460,7 +1651,7 @@ button:disabled { opacity: .55; cursor: not-allowed; transform: none; }
 }
 @media (min-width: 900px) {
     .card-grid { grid-template-columns: repeat(6, 1fr); }
-    #auctions-grid { grid-template-columns: repeat(4, 1fr); }
+    .market-grid { grid-template-columns: repeat(4, 1fr); }
     .tabbar { bottom: 14px; border-radius: 22px; border: 1px solid var(--border); padding-bottom: 6px; height: var(--tabbar-h); box-shadow: var(--shadow); }
     body { padding-bottom: calc(var(--tabbar-h) + 40px); }
     #toast-container { bottom: calc(var(--tabbar-h) + 30px); }

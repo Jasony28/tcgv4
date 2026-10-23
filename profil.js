@@ -1,16 +1,22 @@
 import {
-  addDoc, collection, serverTimestamp,
-  doc, getDoc, updateDoc, arrayUnion, arrayRemove, increment, runTransaction,
-  query, where, getDocs, onSnapshot
+  collection, doc, getDoc, updateDoc, query, where, getDocs, onSnapshot
 } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { protectPage } from './auth-manager.js';
 import { allCards as allCardsV1 } from './cards.js';
 import { allCardsV2 } from './cards1.js';
 import { db } from './firebase-config.js';
-import { showToast } from './toast.js';
+import { showToast, showConfirmDialog } from './toast.js';
 import { updateQuestProgress } from './quest-manager.js';
 import { getAchievementsStatus, rewardText, countClaimedAchievements } from './achievements-config.js';
 import { claimAchievement } from './achievements.js';
+import {
+  sendFriendRequest, acceptFriendRequest, refuseFriendRequest, removeFriend,
+  createTradeRequest, validateTrade, normalizeOffer, checkOfferAffordable
+} from './trade-service.js';
+import { getLevel } from './battlepass-config.js';
+import { cardLabel } from './market-service.js';
+import { allCardsV3, allCardsV3Released, V3_RELEASED } from './cards-v3.js';
+import { getWeekKey } from './daily-utils.js';
 
 // ----------- VARIABLES GLOBALES -----------
 
@@ -24,7 +30,7 @@ let ready = false;
 const tradeNotifIntervals = {}; // tradeReqId -> interval du compte à rebours
 
 // Les deux collections (V1 + V2) pour retrouver nom/image de n'importe quelle carte
-const allCards = [...allCardsV1, ...allCardsV2];
+const allCards = [...allCardsV1, ...allCardsV2, ...allCardsV3Released];
 
 // ----------- UTILS -----------
 
@@ -57,13 +63,14 @@ async function initializeProfilPage() {
   setText('stats-cards-sold-console', stats.cardsSoldConsole || 0);
   setText('stats-cards-sold-market', stats.cardsSoldMarket || 0);
   setText('stats-failed-sales', stats.failedSales || 0);
+  // name : boosters vendus au marché (pas de cardId)
   setText('stats-best-sale',
     (stats.bestSale && typeof stats.bestSale.price === "number" && stats.bestSale.price > 0)
-      ? `${getCardNameById(stats.bestSale.cardId)} (${stats.bestSale.price} pièces)` : "Aucune"
+      ? `${stats.bestSale.name || getCardNameById(stats.bestSale.cardId)} (${stats.bestSale.price} pièces)` : "Aucune"
   );
   setText('stats-best-purchase',
     (stats.bestPurchase && typeof stats.bestPurchase.price === "number" && stats.bestPurchase.price > 0)
-      ? `${getCardNameById(stats.bestPurchase.cardId)} (${stats.bestPurchase.price} pièces)` : "Aucun"
+      ? `${stats.bestPurchase.name || getCardNameById(stats.bestPurchase.cardId)} (${stats.bestPurchase.price} pièces)` : "Aucun"
   );
 
   // Modale pseudo
@@ -174,179 +181,214 @@ function renderAchievements(userData) {
 
 // ----------- AMIS & LISTES -----------
 
-function setupFriendsFeature(userData) {
+let openSection = null; // 'friends' | 'requests' | null
+
+function setupFriendsFeature() {
+  const input = document.getElementById('friend-pseudo-input');
   const addFriendBtn = document.getElementById('add-friend-btn');
-  if (addFriendBtn) {
-    addFriendBtn.onclick = async () => {
-      const friendPseudo = prompt("Entrez le pseudo de votre ami à ajouter :");
-      if (!friendPseudo || friendPseudo.trim() === "") return;
-      const q = query(collection(db, "users"), where("pseudo", "==", friendPseudo.trim()));
-      const querySnapshot = await getDocs(q);
-      if (querySnapshot.empty) {
-        showToast('error', "Aucun utilisateur trouvé avec ce pseudo.");
-        return;
-      }
-      const friendDoc = querySnapshot.docs[0];
-      const friendUid = friendDoc.id;
-      if (friendUid === userData.uid) {
-        showToast('error', "Impossible de s’ajouter soi-même !");
-        return;
-      }
-      if (userData.friends && userData.friends.includes(friendUid)) {
-        showToast('error', "Cet utilisateur est déjà dans vos amis !");
-        return;
-      }
-      const friendData = friendDoc.data();
-      if (friendData.friendRequests && friendData.friendRequests.includes(userData.uid)) {
-        showToast('info', "Demande déjà envoyée, en attente d’acceptation.");
-        return;
-      }
-      await updateDoc(doc(db, "users", friendUid), { friendRequests: arrayUnion(userData.uid) });
-      showToast('success', "Demande envoyée !");
-    };
-  }
-  const friendsListBtn = document.getElementById('friends-list-btn');
-  if (friendsListBtn) friendsListBtn.onclick = refreshFriendsList;
-  const friendRequestsBtn = document.getElementById('friend-requests-btn');
-  if (friendRequestsBtn) friendRequestsBtn.onclick = refreshFriendRequestsList;
+  const submit = async () => {
+    addFriendBtn.disabled = true;
+    try {
+      const res = await sendFriendRequest(globalUserData, input.value);
+      input.value = '';
+      showToast('success', res.status === 'accepted'
+        ? `${res.pseudo} t'avait déjà demandé : vous êtes maintenant amis !`
+        : `Demande envoyée à ${res.pseudo} !`);
+    } catch (e) {
+      showToast('error', e.message);
+    } finally {
+      addFriendBtn.disabled = false;
+    }
+  };
+  addFriendBtn.onclick = submit;
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+
+  document.getElementById('friends-list-btn').onclick = () => toggleSection('friends');
+  document.getElementById('friend-requests-btn').onclick = () => toggleSection('requests');
+
+  // Mes données en direct : compteurs et listes toujours à jour (nouvelle demande, ami ajouté…)
+  onSnapshot(doc(db, "users", globalUserData.uid), (snap) => {
+    if (!snap.exists()) return;
+    globalUserData = { ...globalUserData, ...snap.data() };
+    updateFriendCounters();
+    document.getElementById('profile-coins').textContent = globalUserData.coins || 0;
+    if (openSection === 'friends') refreshFriendsList();
+    if (openSection === 'requests') refreshFriendRequestsList();
+  });
 }
 
+function updateFriendCounters() {
+  const nbFriends = (globalUserData.friends || []).length;
+  const nbRequests = (globalUserData.friendRequests || []).length;
+  document.getElementById('friends-list-btn').innerHTML = `Mes amis <span class="count-pill">${nbFriends}</span>`;
+  document.getElementById('friend-requests-btn').innerHTML = `Demandes ${nbRequests ? `<span class="count-pill alert">${nbRequests}</span>` : ''}`;
+}
+
+function toggleSection(name) {
+  const friends = document.getElementById('friends-section');
+  const requests = document.getElementById('friend-requests-section');
+  openSection = openSection === name ? null : name;
+  friends.style.display = openSection === 'friends' ? 'block' : 'none';
+  requests.style.display = openSection === 'requests' ? 'block' : 'none';
+  document.getElementById('friends-list-btn').classList.toggle('active', openSection === 'friends');
+  document.getElementById('friend-requests-btn').classList.toggle('active', openSection === 'requests');
+  if (openSection === 'friends') refreshFriendsList();
+  if (openSection === 'requests') refreshFriendRequestsList();
+}
+
+const isOnline = (u) => u.lastOnline && (Date.now() - u.lastOnline.toDate().getTime() < 5 * 60 * 1000);
+function lastSeenText(u) {
+  if (isOnline(u)) return 'En ligne';
+  if (!u.lastOnline) return 'Jamais vu';
+  const mins = Math.floor((Date.now() - u.lastOnline.toDate().getTime()) / 60000);
+  if (mins < 60) return `Vu il y a ${mins} min`;
+  if (mins < 1440) return `Vu il y a ${Math.floor(mins / 60)} h`;
+  return `Vu il y a ${Math.floor(mins / 1440)} j`;
+}
+
+let friendsRenderToken = 0;
 window.refreshFriendsList = async function() {
-  const userSnap = await getDoc(doc(db, "users", globalUserData.uid));
-  if (!userSnap.exists()) return;
-  const userData = { ...globalUserData, ...userSnap.data() };
-  globalUserData.friends = userData.friends;
+  const token = ++friendsRenderToken; // évite les doublons si deux rafraîchissements se croisent
   const section = document.getElementById('friends-section');
-  section.innerHTML = "";
-  section.style.display = 'block';
-  const friends = userData.friends || [];
+  const friends = globalUserData.friends || [];
   if (friends.length === 0) {
-    section.innerHTML = "<p class='empty-msg'>Tu n’as pas encore d’amis.</p>";
+    section.innerHTML = "<p class='empty-msg'>Tu n’as pas encore d’amis. Ajoute-les avec leur pseudo !</p>";
     return;
   }
-  for (let friendUid of friends) {
-    try {
-      const friendRef = doc(db, "users", friendUid);
-      const friendSnap = await getDoc(friendRef);
-      if (!friendSnap.exists()) continue;
-      const friend = friendSnap.data();
-      const now = Date.now();
-      const lastOnline = friend.lastOnline ? friend.lastOnline.toDate().getTime() : 0;
-      const isOnline = (now - lastOnline < 5 * 60 * 1000);
-      const friendDiv = document.createElement('div');
-      friendDiv.className = 'friend-block';
-      friendDiv.innerHTML = `
-        <div class="friend-head">
-          <strong>${escapeHtml(friend.pseudo)}</strong>
-          <span class="friend-badges" title="Succès obtenus">🏅 ${countClaimedAchievements(friend)}</span>
-          <span class="friend-status ${isOnline ? 'online' : ''}">
-            ${isOnline ? "En ligne" : ("Dernière connexion : " + (lastOnline ? new Date(lastOnline).toLocaleString() : 'inconnue'))}
-          </span>
-        </div>
-        <div class="friend-actions">
-          <button class="profile-btn blue"
-            onclick="window.showFriendCollection && window.showFriendCollection('${friendUid}')">Collection</button>
-          <button class="profile-btn success"
-            onclick="window.startTradeWithFriend && window.startTradeWithFriend('${friendUid}')">Échanger</button>
-        </div>
-      `;
-      section.appendChild(friendDiv);
-    } catch {}
+  const snaps = await Promise.all(friends.map(uid => getDoc(doc(db, "users", uid)).catch(() => null)));
+  if (token !== friendsRenderToken) return;
+  const list = snaps.filter(s => s?.exists()).map(s => ({ uid: s.id, ...s.data() }))
+    .sort((a, b) => (isOnline(b) ? 1 : 0) - (isOnline(a) ? 1 : 0) || (a.pseudo || '').localeCompare(b.pseudo || ''));
+  section.innerHTML = '';
+  for (const friend of list) {
+    const friendDiv = document.createElement('div');
+    friendDiv.className = 'friend-block';
+    friendDiv.innerHTML = `
+      <div class="friend-head">
+        <strong>${escapeHtml(friend.pseudo)}</strong>
+        <span class="friend-badges" title="Succès obtenus">🏅 ${countClaimedAchievements(friend)}</span>
+        <span class="friend-status ${isOnline(friend) ? 'online' : ''}">${lastSeenText(friend)}</span>
+      </div>
+      <div class="friend-actions three">
+        <button class="profile-btn blue" data-action="profile">Profil</button>
+        <button class="profile-btn success" data-action="trade">Échanger</button>
+        <button class="profile-btn ghost small" data-action="remove" title="Retirer de mes amis">✕</button>
+      </div>
+    `;
+    friendDiv.querySelector('[data-action="profile"]').onclick = () => showFriendProfile(friend.uid);
+    friendDiv.querySelector('[data-action="trade"]').onclick = () => startTradeWithFriend(friend.uid, friend.pseudo);
+    friendDiv.querySelector('[data-action="remove"]').onclick = async () => {
+      const ok = await showConfirmDialog({ title: 'Retirer cet ami ?', message: `${friend.pseudo} ne sera plus dans ta liste d'amis.`, confirmText: 'Retirer', cancelText: 'Annuler' });
+      if (!ok) return;
+      try { await removeFriend(globalUserData.uid, friend.uid); showToast('info', `${friend.pseudo} a été retiré de tes amis.`); }
+      catch (e) { showToast('error', e.message); }
+    };
+    section.appendChild(friendDiv);
   }
 };
 
 window.refreshFriendRequestsList = async function() {
   const section = document.getElementById('friend-requests-section');
-  section.innerHTML = "";
-  section.style.display = 'block';
-  const userSnap = await getDoc(doc(db, "users", globalUserData.uid));
-  if (!userSnap.exists()) return;
-  const userData = userSnap.data();
-  globalUserData.friendRequests = userData.friendRequests || [];
-  const requests = userData.friendRequests || [];
+  const requests = globalUserData.friendRequests || [];
   if (requests.length === 0) {
     section.innerHTML = "<p class='empty-msg'>Aucune demande en attente.</p>";
     return;
   }
-  for (const requestUid of requests) {
-    const reqRef = doc(db, "users", requestUid);
-    const reqSnap = await getDoc(reqRef);
-    const reqUser = reqSnap.exists() ? reqSnap.data() : { pseudo: "(utilisateur inconnu)" };
+  const snaps = await Promise.all(requests.map(uid => getDoc(doc(db, "users", uid)).catch(() => null)));
+  section.innerHTML = '';
+  requests.forEach((requestUid, i) => {
+    const reqUser = snaps[i]?.exists() ? snaps[i].data() : { pseudo: "(joueur supprimé)" };
     const block = document.createElement('div');
     block.className = 'friend-request-block';
     block.innerHTML = `
       <strong>${escapeHtml(reqUser.pseudo)}</strong>
-      <button class="profile-btn success" onclick="window.acceptFriendRequest && window.acceptFriendRequest('${requestUid}')">Accepter</button>
-      <button class="profile-btn warn" onclick="window.refuseFriendRequest && window.refuseFriendRequest('${requestUid}')">Refuser</button>
+      <button class="profile-btn success" data-action="accept">Accepter</button>
+      <button class="profile-btn warn" data-action="refuse">Refuser</button>
     `;
+    block.querySelector('[data-action="accept"]').onclick = async () => {
+      try { await acceptFriendRequest(globalUserData.uid, requestUid); showToast('success', `${reqUser.pseudo} est maintenant ton ami !`); }
+      catch (e) { showToast('error', e.message); }
+    };
+    block.querySelector('[data-action="refuse"]').onclick = async () => {
+      try { await refuseFriendRequest(globalUserData.uid, requestUid); showToast('info', "Demande refusée."); }
+      catch (e) { showToast('error', e.message); }
+    };
     section.appendChild(block);
-  }
+  });
 };
 
-window.acceptFriendRequest = async function(requestUid) {
-  const userRef = doc(db, "users", globalUserData.uid);
-  const requesterRef = doc(db, "users", requestUid);
-  const userSnap = await getDoc(userRef);
-  const userData = userSnap.data();
-  const newRequests = (userData.friendRequests || []).filter(uid => uid !== requestUid);
-  await updateDoc(userRef, { friends: arrayUnion(requestUid), friendRequests: newRequests });
-  await updateDoc(requesterRef, { friends: arrayUnion(globalUserData.uid) });
-  showToast('success', "Demande acceptée !");
-  setTimeout(() => refreshFriendRequestsList(), 500);
-};
-window.refuseFriendRequest = async function(requestUid) {
-  const userRef = doc(db, "users", globalUserData.uid);
-  const userSnap = await getDoc(userRef);
-  const userData = userSnap.data();
-  const newRequests = (userData.friendRequests || []).filter(uid => uid !== requestUid);
-  await updateDoc(userRef, { friendRequests: newRequests });
-  showToast('info', "Demande refusée.");
-  setTimeout(() => refreshFriendRequestsList(), 400);
-};
+// ----------- PROFIL D'UN AMI (stats, collection, succès) -----------
 
-window.showFriendCollection = async function(friendUid) {
-  const friendRef = doc(db, "users", friendUid);
-  const friendSnap = await getDoc(friendRef);
-  if (!friendSnap.exists()) return showToast('error', "Utilisateur introuvable !");
-  const friend = friendSnap.data();
-  let html = `<h4 class="friend-collection-title">${escapeHtml(friend.pseudo)} – Collection</h4>`;
-  try {
-    let v1Html = '';
-    for (let card of allCards) {
-      const quantity = friend.collection?.[card.id]?.quantity || 0;
-      if (quantity > 0) {
-        v1Html += `
-          <div class="friend-card-item">
-            <img src="${card.image}" alt="${card.name}">
-            ${card.name} <span>x${quantity}</span>
-          </div>`;
-      }
-    }
-    html += v1Html ? `<div class="friend-card-list">${v1Html}</div>` : `<p class="empty-msg">Aucune carte</p>`;
-  } catch {}
-  if (html.endsWith('</h4>')) html += `<p class="empty-msg">Aucune carte possédée</p>`;
-  const section = document.getElementById('friends-section');
-  section.innerHTML = '<div class="friend-block">' + html + '<div style="margin-top:14px"><button class="profile-btn" onclick="document.getElementById(\'friends-section\').style.display=\'none\'">Fermer</button></div></div>';
-};
+function bestText(entry) {
+  if (!entry || typeof entry.price !== 'number' || entry.price <= 0) return 'Aucune';
+  return `${escapeHtml(entry.name || getCardNameById(entry.cardId))} (${entry.price} pièces)`;
+}
+
+async function showFriendProfile(friendUid) {
+  const snap = await getDoc(doc(db, "users", friendUid));
+  if (!snap.exists()) return showToast('error', "Joueur introuvable !");
+  const friend = snap.data();
+  const stats = friend.stats || {};
+  const owned = (cards) => cards.filter(c => friend.collection?.[c.id]?.quantity > 0).length;
+  const v1 = owned(allCardsV1), v2 = owned(allCardsV2), v3 = owned(allCardsV3);
+  const bp = friend.battlePass?.seasonId === getWeekKey() ? friend.battlePass : null;
+  const level = bp ? getLevel(bp.xp) : 0;
+  const badges = getAchievementsStatus(friend).filter(a => a.claimed);
+  const ownedCards = allCards.filter(c => friend.collection?.[c.id]?.quantity > 0);
+  const legendaries = ownedCards.filter(c => c.rarity === 'Légendaire').length;
+
+  const bar = (n, total) => `<div class="xp-bar"><div class="xp-bar-fill" style="width:${Math.round(n / total * 100)}%"></div></div>`;
+  document.getElementById('friend-modal-body').innerHTML = `
+    <div class="friend-profile-head">
+      <div class="profile-avatar small" aria-hidden="true">${escapeHtml((friend.pseudo || '?')[0].toUpperCase())}</div>
+      <div>
+        <h3>${escapeHtml(friend.pseudo)}</h3>
+        <span class="friend-status ${isOnline(friend) ? 'online' : ''}">${lastSeenText(friend)}</span>
+      </div>
+    </div>
+    ${badges.length ? `<div class="profile-badges">${badges.map(a => `<span class="badge-medal tier-${a.tier}" title="${escapeHtml(a.title)}">${a.icon}</span>`).join('')}</div>` : ''}
+
+    <div class="stats-grid compact">
+      <div class="stat-item"><span class="stat-value">${level}</span><span class="stat-label">Niveau du Pass</span></div>
+      <div class="stat-item"><span class="stat-value">${legendaries}</span><span class="stat-label">Légendaires</span></div>
+      <div class="stat-item"><span class="stat-value">${stats.boostersOpened || 0}</span><span class="stat-label">Boosters ouverts</span></div>
+      <div class="stat-item"><span class="stat-value">${badges.length}</span><span class="stat-label">Succès</span></div>
+      <div class="stat-item"><span class="stat-value">${stats.cardsSoldMarket || 0}</span><span class="stat-label">Ventes au marché</span></div>
+      <div class="stat-item"><span class="stat-value">${stats.cardsSoldConsole || 0}</span><span class="stat-label">Ventes console</span></div>
+      <div class="stat-item full-width"><span class="stat-label">Vente la plus chère</span><span class="stat-value">${bestText(stats.bestSale)}</span></div>
+      <div class="stat-item full-width"><span class="stat-label">Achat le plus cher</span><span class="stat-value">${bestText(stats.bestPurchase)}</span></div>
+    </div>
+
+    <div class="album-progress">
+      <div class="progress-head"><span>Album V1</span><span><strong>${v1}</strong> / ${allCardsV1.length}</span></div>${bar(v1, allCardsV1.length)}
+      <div class="progress-head"><span>Album V2</span><span><strong>${v2}</strong> / ${allCardsV2.length}</span></div>${bar(v2, allCardsV2.length)}
+      ${V3_RELEASED ? `<div class="progress-head"><span>Album V3</span><span><strong>${v3}</strong> / ${allCardsV3.length}</span></div>${bar(v3, allCardsV3.length)}` : ""}
+    </div>
+
+    <h4 class="friend-collection-title">Sa collection</h4>
+    ${ownedCards.length ? `<div class="friend-card-list">${ownedCards.map(card => `
+      <div class="friend-card-item">
+        <img src="${card.image}" alt="${escapeHtml(card.name)}">
+        ${escapeHtml(cardLabel(card))} <span>x${friend.collection[card.id].quantity}</span>
+      </div>`).join('')}</div>` : `<p class="empty-msg">Aucune carte</p>`}
+
+    <button class="profile-btn success" id="friend-modal-trade">🔄 Proposer un échange</button>
+  `;
+  document.getElementById('friend-modal-trade').onclick = () => { closeFriendModal(); startTradeWithFriend(friendUid, friend.pseudo); };
+  document.getElementById('friend-modal').style.display = 'flex';
+}
+function closeFriendModal() { document.getElementById('friend-modal').style.display = 'none'; }
 
 // ----------- ECHANGE (DEMANDE/NOTIF) -----------
 
-window.startTradeWithFriend = async function(friendUid) {
-  await addDoc(
-    collection(db, "tradeRequests"),
-    {
-      from: globalUserData.uid,
-      to: friendUid,
-      status: "pending",
-      createdAt: serverTimestamp(),
-      offerA: { cards: {}, coins: 0 },
-      offerB: { cards: {}, coins: 0 },
-      readyA: false,
-      readyB: false
-    }
-  );
-  showToast('success', "Demande d'échange envoyée !");
-};
+async function startTradeWithFriend(friendUid, pseudo) {
+  try {
+    await createTradeRequest(globalUserData.uid, friendUid);
+    showToast('success', `Demande d'échange envoyée à ${pseudo || 'ton ami'} ! L'échange s'ouvrira quand il acceptera.`, 4500);
+  } catch (e) {
+    showToast('error', e.message);
+  }
+}
 
 function listenForTradeRequests() {
   const q = query(
@@ -358,12 +400,11 @@ function listenForTradeRequests() {
     snapshot.docChanges().forEach((change) => {
       if (change.type === "added") {
         const data = change.doc.data();
-        console.log("Nouvelle demande d'échange reçue !", change.doc.id, data);
         if (data.createdAt && data.createdAt.toDate) {
           const created = data.createdAt.toDate().getTime();
           if (Date.now() - created > 2 * 60 * 1000) return;
         }
-        window.showIncomingTradeNotif(change.doc.id, data);
+        showIncomingTradeNotif(change.doc.id, data);
       }
     });
   });
@@ -374,60 +415,48 @@ function listenForTradeResponses() {
     where("from", "==", globalUserData.uid),
     where("status", "in", ["accepted", "refused", "expired", "canceled"])
   );
+  const seen = {};
   onSnapshot(q, (snapshot) => {
     snapshot.docChanges().forEach(change => {
       const data = change.doc.data();
       const tradeId = change.doc.id;
-      window.__lastTradeStatus = window.__lastTradeStatus || {};
       if (data.createdAt && data.createdAt.toDate) {
         const created = data.createdAt.toDate().getTime();
-        if (Date.now() - created > 2 * 60 * 1000) return;
+        if (Date.now() - created > 10 * 60 * 1000) return;
       }
-      if (window.__lastTradeStatus[tradeId] === "accepted" || window.__lastTradeStatus[tradeId] === "refused") return;
-      if (data.status === "accepted") {
-        window.__lastTradeStatus[tradeId] = "accepted";
-        showToast('success', "Demande acceptée ! Lancement de l’échange...");
+      if (seen[tradeId] === data.status) return;
+      seen[tradeId] = data.status;
+      if (data.status === "accepted" && currentTradeId !== tradeId) {
+        showToast('success', "Demande acceptée ! Lancement de l’échange...");
         openTradeUI(data, tradeId);
       } else if (data.status === "refused") {
-        window.__lastTradeStatus[tradeId] = "refused";
         showToast('error', "Ton ami a refusé l’échange.");
       } else if (data.status === "expired") {
-        if (!window.__lastTradeStatus[tradeId]) {
-          window.__lastTradeStatus[tradeId] = "expired";
-          showToast('info', "La demande d’échange a expiré.");
-        }
-      } else if (data.status === "canceled") {
-        showToast('info', "L'échange a été annulé.");
+        showToast('info', "La demande d’échange a expiré.");
       }
     });
   });
 }
 
-window.showIncomingTradeNotif = function(tradeReqId, data) {
-  console.log('Appel de showIncomingTradeNotif', tradeReqId, data);
+function showIncomingTradeNotif(tradeReqId, data) {
   if (document.getElementById('trade-notif-'+tradeReqId)) return;
   const notif = document.createElement('div');
   notif.id = 'trade-notif-'+tradeReqId;
   notif.className = 'trade-notif';
   notif.innerHTML = `
-    <div>
-      <strong class="trade-from-pseudo">…</strong> souhaite échanger avec toi !
-    </div>
+    <div>🔄 <strong class="trade-from-pseudo">…</strong> veut échanger avec toi !</div>
     <div class="friend-actions">
-      <button class="profile-btn success" onclick="window.acceptTradeNotif('${tradeReqId}')">Accepter</button>
-      <button class="profile-btn warn" onclick="window.refuseTradeNotif('${tradeReqId}')">Refuser</button>
+      <button class="profile-btn success" data-action="accept">Accepter</button>
+      <button class="profile-btn warn" data-action="refuse">Refuser</button>
     </div>
     <div id="trade-timer-${tradeReqId}" class="trade-notif-timer"></div>
   `;
+  notif.querySelector('[data-action="accept"]').onclick = () => acceptTradeNotif(tradeReqId);
+  notif.querySelector('[data-action="refuse"]').onclick = () => refuseTradeNotif(tradeReqId);
   document.body.appendChild(notif);
-  (async () => {
-    try {
-      const userSnap = await getDoc(doc(db, "users", data.from));
-      if (userSnap.exists()) {
-        notif.querySelector('.trade-from-pseudo').textContent = userSnap.data().pseudo;
-      }
-    } catch {}
-  })();
+  getDoc(doc(db, "users", data.from)).then(userSnap => {
+    if (userSnap.exists()) notif.querySelector('.trade-from-pseudo').textContent = userSnap.data().pseudo;
+  }).catch(() => {});
   let timer = 60;
   const timerEl = document.getElementById('trade-timer-'+tradeReqId);
   timerEl.textContent = `Temps restant : 60s`;
@@ -440,223 +469,194 @@ window.showIncomingTradeNotif = function(tradeReqId, data) {
     }
   }, 1000);
   tradeNotifIntervals[tradeReqId] = interval;
-};
+}
 
-// Retire la notif ET stoppe son compte à rebours. Avant, le minuteur continuait après
-// "Accepter" et passait l'échange en cours à "expired" au bout de 60s.
+// Retire la notif ET stoppe son compte à rebours (sinon l'échange accepté passait en "expired")
 function clearTradeNotif(tradeReqId) {
   clearInterval(tradeNotifIntervals[tradeReqId]);
   delete tradeNotifIntervals[tradeReqId];
   document.getElementById('trade-notif-'+tradeReqId)?.remove();
 }
 
-window.acceptTradeNotif = async function(tradeReqId) {
+async function acceptTradeNotif(tradeReqId) {
   try {
     clearTradeNotif(tradeReqId);
     await updateDoc(doc(db, "tradeRequests", tradeReqId), { status: "accepted" });
-    showToast('success', "Tu as accepté la demande d'échange !");
     const tradeSnap = await getDoc(doc(db, "tradeRequests", tradeReqId));
-    if (tradeSnap.exists()) {
-      openTradeUI(tradeSnap.data(), tradeReqId);
-    }
+    if (tradeSnap.exists()) openTradeUI(tradeSnap.data(), tradeReqId);
   } catch (err) {
-    showToast('error', "Erreur Firestore : " + err.message);
+    showToast('error', "Erreur : " + err.message);
   }
-};
-window.refuseTradeNotif = async function(tradeReqId) {
+}
+async function refuseTradeNotif(tradeReqId) {
   clearTradeNotif(tradeReqId);
   await updateDoc(doc(db, "tradeRequests", tradeReqId), { status: "refused" });
   showToast('info', "Tu as refusé la demande d'échange.");
-};
+}
 
-// ----------- MODALE D'ECHANGE (COMPLÈTE) -----------
+// ----------- MODALE D'ECHANGE -----------
 
-window.openTradeUI = function(tradeData, tradeId) {
+const BOOSTER_LABELS = { classic: 'Booster Classique', v2: 'Booster V2', v3: 'Booster V3', legendary: 'Booster Légendaire' };
+let localBoosters = { classic: 0, v2: 0, legendary: 0 };
+
+async function openTradeUI(tradeData, tradeId) {
   currentTradeId = tradeId;
   currentTradeData = tradeData;
-  localOffer = {}; localCoins = 0; ready = false;
+  localOffer = {}; localCoins = 0; localBoosters = { classic: 0, v2: 0, legendary: 0 }; ready = false;
+
+  // Données fraîches : la collection a pu changer depuis l'ouverture de la page
+  const meSnap = await getDoc(doc(db, "users", globalUserData.uid));
+  globalUserData = { ...globalUserData, ...meSnap.data() };
 
   document.getElementById('trade-modal').style.display = 'flex';
   document.getElementById('trade-your-pseudo').textContent = globalUserData.pseudo;
-  let otherUid = (tradeData.from === globalUserData.uid) ? tradeData.to : tradeData.from;
+  const otherUid = (tradeData.from === globalUserData.uid) ? tradeData.to : tradeData.from;
   getDoc(doc(db, "users", otherUid)).then(snap => {
-    document.getElementById('trade-other-pseudo').textContent = snap.data()?.pseudo || "???";
+    const pseudo = snap.data()?.pseudo || "???";
+    document.getElementById('trade-other-pseudo').textContent = pseudo;
+    document.getElementById('trade-title').textContent = `Échange avec ${pseudo}`;
   });
 
   document.getElementById('trade-accept-btn').onclick = handleReadyToggle;
   document.getElementById('trade-cancel-btn').onclick = handleCancelTrade;
   document.getElementById('close-trade-modal').onclick = handleCancelTrade;
 
-  renderYourDuplicates();
+  renderYourOffer();
 
   if (tradeUnsubscribe) tradeUnsubscribe();
   tradeUnsubscribe = onSnapshot(doc(db, "tradeRequests", tradeId), (docSnap) => {
     if (!docSnap.exists()) return;
     updateTradeModalUI(docSnap.data());
   });
-};
+}
 
-function renderYourDuplicates() {
+function renderYourOffer() {
   const container = document.getElementById('trade-your-cards');
   container.innerHTML = '';
-  for (const cardId in globalUserData.collection) {
-    const qty = globalUserData.collection[cardId].quantity;
-    if (qty >= 2) {
-      const div = document.createElement('div');
-      div.innerHTML = `
-        <img src="${getCardImg(cardId)}" style="height:40px;margin:2px;">
-        x${qty} 
-        <button data-card="${cardId}" class="minus-btn">-</button>
-        <span class="trade-offer-qty">${localOffer[cardId] || 0}</span>
-        <button data-card="${cardId}" class="plus-btn">+</button>
-      `;
-      container.appendChild(div);
-    }
+  const dupes = allCards.filter(c => (globalUserData.collection?.[c.id]?.quantity || 0) >= 2);
+  if (dupes.length === 0) container.innerHTML = "<span class='empty-msg'>Aucun doublon à proposer</span>";
+  for (const card of dupes) {
+    const qty = globalUserData.collection[card.id].quantity;
+    const row = document.createElement('div');
+    row.innerHTML = `
+      <img src="${card.image}" alt="">
+      <span class="trade-card-name">${escapeHtml(cardLabel(card))}<small>x${qty}</small></span>
+      <button class="minus-btn">-</button>
+      <span class="trade-offer-qty">${localOffer[card.id] || 0}</span>
+      <button class="plus-btn">+</button>
+    `;
+    row.querySelector('.plus-btn').onclick = () => updateCardOffer(card.id, 1);
+    row.querySelector('.minus-btn').onclick = () => updateCardOffer(card.id, -1);
+    container.appendChild(row);
   }
-  container.querySelectorAll('.plus-btn').forEach(btn =>
-    btn.onclick = () => updateCardOffer(btn.dataset.card, 1)
-  );
-  container.querySelectorAll('.minus-btn').forEach(btn =>
-    btn.onclick = () => updateCardOffer(btn.dataset.card, -1)
-  );
+  // Boosters
+  for (const [type, label] of Object.entries(BOOSTER_LABELS)) {
+    const have = globalUserData.boosterInventory?.[type] || 0;
+    if (!have) continue;
+    const row = document.createElement('div');
+    row.className = 'trade-booster-row';
+    row.innerHTML = `
+      <img src="assets/booster/booster.png" class="booster-thumb ${type}" alt="">
+      <span class="trade-card-name">${label}<small>x${have}</small></span>
+      <button class="minus-btn">-</button>
+      <span class="trade-offer-qty">${localBoosters[type]}</span>
+      <button class="plus-btn">+</button>
+    `;
+    row.querySelector('.plus-btn').onclick = () => { localBoosters[type] = Math.min(have, localBoosters[type] + 1); renderYourOffer(); updateTradeFirestore(); };
+    row.querySelector('.minus-btn').onclick = () => { localBoosters[type] = Math.max(0, localBoosters[type] - 1); renderYourOffer(); updateTradeFirestore(); };
+    container.appendChild(row);
+  }
   const coinsInput = document.getElementById('trade-your-coins');
   coinsInput.value = localCoins;
-  coinsInput.max = globalUserData.coins;
+  coinsInput.max = globalUserData.coins || 0;
   coinsInput.oninput = () => {
     let val = parseInt(coinsInput.value) || 0;
-    if (val < 0) val = 0;
-    if (val > globalUserData.coins) val = globalUserData.coins;
+    val = Math.min(Math.max(0, val), globalUserData.coins || 0);
     localCoins = val;
     updateTradeFirestore();
   };
 }
 
 function updateCardOffer(cardId, delta) {
-  const maxQty = globalUserData.collection[cardId].quantity - 1;
-  localOffer[cardId] = (localOffer[cardId] || 0) + delta;
-  if (localOffer[cardId] < 0) localOffer[cardId] = 0;
-  if (localOffer[cardId] > maxQty) localOffer[cardId] = maxQty;
-  renderYourDuplicates();
+  const maxQty = (globalUserData.collection?.[cardId]?.quantity || 0) - 1;
+  localOffer[cardId] = Math.min(Math.max(0, (localOffer[cardId] || 0) + delta), maxQty);
+  if (localOffer[cardId] === 0) delete localOffer[cardId];
+  renderYourOffer();
   updateTradeFirestore();
 }
+
+function myOffer() {
+  return normalizeOffer({ cards: localOffer, coins: localCoins, boosters: localBoosters });
+}
+
 function updateTradeFirestore() {
   if (!currentTradeId) return;
   const isA = (currentTradeData.from === globalUserData.uid);
-  const offerField = isA ? "offerA" : "offerB";
-  // L'offre change : les DEUX joueurs doivent revalider. Avant, l'autre restait "prêt"
-  // et pouvait valider une offre modifiée sans l'avoir vue.
+  // L'offre change : les DEUX joueurs doivent revalider
   updateDoc(doc(db, "tradeRequests", currentTradeId), {
-    [offerField]: { cards: {...localOffer}, coins: localCoins },
+    [isA ? "offerA" : "offerB"]: myOffer(),
     readyA: false,
     readyB: false
   });
   ready = false;
-  document.getElementById('trade-status-msg').textContent = '';
 }
 
 function handleReadyToggle() {
   if (!currentTradeId) return;
-  for (const cardId in localOffer) {
-    const qty = globalUserData.collection[cardId].quantity;
-    if (localOffer[cardId] > qty - 1) {
-      showToast("error", "Tu ne peux pas offrir plus que tes doublons !");
-      return;
-    }
-  }
-  if (localCoins > globalUserData.coins) {
-    showToast("error", "Pas assez de pièces !");
-    return;
-  }
+  const err = checkOfferAffordable(globalUserData, myOffer());
+  if (err) { showToast("error", err); return; }
   const isA = (currentTradeData.from === globalUserData.uid);
-  const readyField = isA ? "readyA" : "readyB";
-  updateDoc(doc(db, "tradeRequests", currentTradeId), { [readyField]: true });
+  updateDoc(doc(db, "tradeRequests", currentTradeId), { [isA ? "readyA" : "readyB"]: true });
   ready = true;
-  document.getElementById('trade-status-msg').textContent = "En attente de l’autre joueur…";
 }
 
-function renderOffer(cardsObj) {
-  if (!cardsObj || Object.keys(cardsObj).length === 0) return "(Aucune carte)";
-  return Object.entries(cardsObj).map(([id, qty]) =>
-    `<span style="display:inline-block;margin:2px;">
-      <img src="${getCardImg(id)}" style="height:32px;vertical-align:middle;">
-      x${qty}
-    </span>`
-  ).join('');
-}
 async function updateTradeModalUI(tradeData) {
   currentTradeData = tradeData;
   const isA = (tradeData.from === globalUserData.uid);
-  const myOffer = isA ? tradeData.offerA : tradeData.offerB;
-  const otherOffer = isA ? tradeData.offerB : tradeData.offerA;
+  const otherOffer = normalizeOffer(isA ? tradeData.offerB : tradeData.offerA);
+  const meReady = isA ? tradeData.readyA : tradeData.readyB;
+  const otherReady = isA ? tradeData.readyB : tradeData.readyA;
 
-  // Affiche l'offre adverse dans la colonne droite
-  renderOtherOffer(otherOffer.cards);
+  renderOtherOffer(otherOffer);
+  document.getElementById('trade-other-coins').textContent = otherOffer.coins;
 
-  document.getElementById('trade-other-coins').textContent = otherOffer.coins || 0;
-
-  if (tradeData.status === "completed") {
-    await onTradeCompleted();
-    return;
-  }
+  if (tradeData.status === "completed") { await onTradeCompleted(); return; }
   if (["canceled", "refused", "expired"].includes(tradeData.status)) {
-    showToast('info', "Échange annulé/refusé.");
+    showToast('info', "Échange annulé.");
     closeTradeModal();
     return;
   }
-  if (tradeData.readyA && tradeData.readyB) {
-    document.getElementById('trade-status-msg').innerHTML = `<button id="trade-final-confirm-btn" class="profile-btn blue">Valider l'échange</button>`;
+  const status = document.getElementById('trade-status-msg');
+  const acceptBtn = document.getElementById('trade-accept-btn');
+  acceptBtn.textContent = meReady ? 'Prêt ✓' : 'Je suis prêt';
+  acceptBtn.disabled = !!meReady;
+  if (meReady && otherReady) {
+    status.innerHTML = `<button id="trade-final-confirm-btn" class="profile-btn blue">✅ Valider l'échange</button>`;
     document.getElementById('trade-final-confirm-btn').onclick = handleFinalValidation;
   } else {
-    document.getElementById('trade-status-msg').textContent = '';
+    status.textContent = otherReady ? "Ton ami est prêt ! Clique sur « Je suis prêt »."
+      : (meReady ? "En attente de ton ami…" : "Choisis ce que tu proposes, puis clique sur « Je suis prêt ».");
   }
 }
 
-
 async function handleFinalValidation() {
-  const docRef = doc(db, "tradeRequests", currentTradeId);
-  await runTransaction(db, async (transaction) => {
-    const tradeSnap = await transaction.get(docRef);
-    if (!tradeSnap.exists()) throw "Échange introuvable.";
-    const trade = tradeSnap.data();
-    const userARef = doc(db, "users", trade.from);
-    const userBRef = doc(db, "users", trade.to);
-    const [userASnap, userBSnap] = await Promise.all([transaction.get(userARef), transaction.get(userBRef)]);
-    const dataA = userASnap.data(), dataB = userBSnap.data();
-    for (const [id, qty] of Object.entries(trade.offerA.cards || {})) {
-      if ((dataA.collection?.[id]?.quantity || 0) < qty) throw "A n’a plus les cartes nécessaires !";
-    }
-    for (const [id, qty] of Object.entries(trade.offerB.cards || {})) {
-      if ((dataB.collection?.[id]?.quantity || 0) < qty) throw "B n’a plus les cartes nécessaires !";
-    }
-    if ((dataA.coins || 0) < (trade.offerA.coins || 0)) throw "A n’a plus assez de pièces.";
-    if ((dataB.coins || 0) < (trade.offerB.coins || 0)) throw "B n’a plus assez de pièces.";
-    // Variation nette par carte : si la même carte est dans les deux offres, la 2e écriture
-    // écrasait la 1re (l'un des joueurs gagnait des cartes sans rien perdre).
-    const delta = {};
-    for (const [id, qty] of Object.entries(trade.offerA.cards || {})) delta[id] = (delta[id] || 0) - qty;
-    for (const [id, qty] of Object.entries(trade.offerB.cards || {})) delta[id] = (delta[id] || 0) + qty;
-    let updatesA = {}, updatesB = {};
-    for (const [id, d] of Object.entries(delta)) {
-      if (d === 0) continue;
-      updatesA[`collection.${id}.quantity`] = increment(d);
-      updatesB[`collection.${id}.quantity`] = increment(-d);
-    }
-    updatesA['coins'] = increment((trade.offerB.coins || 0) - (trade.offerA.coins || 0));
-    updatesB['coins'] = increment((trade.offerA.coins || 0) - (trade.offerB.coins || 0));
-    transaction.update(userARef, updatesA);
-    transaction.update(userBRef, updatesB);
-    transaction.update(docRef, { status: "completed" });
-  }).then(() => onTradeCompleted()).catch(e => {
-    showToast("error", "Erreur : " + (e?.message || e));
-  });
+  const btn = document.getElementById('trade-final-confirm-btn');
+  if (btn) btn.disabled = true;
+  try {
+    await validateTrade(currentTradeId);
+    await onTradeCompleted();
+  } catch (e) {
+    // Si l'ami a validé en même temps, l'échange est déjà fait : l'écouteur fermera la fenêtre
+    if (!/déjà effectué/.test(e.message)) showToast("error", e.message);
+    if (btn) btn.disabled = false;
+  }
 }
-// Appelé une seule fois par joueur (par le validateur après la transaction, ou via l'écouteur
-// pour l'autre joueur). Avant, le validateur fermait la modale avant de recevoir "completed"
-// et ne gagnait jamais la quête d'échange.
+
+// Appelé une seule fois par joueur (par le validateur, ou via l'écouteur pour l'autre joueur)
 async function onTradeCompleted() {
   if (!currentTradeId) return;
   closeTradeModal();
-  showToast('success', "Échange effectué !");
+  showToast('success', "🔄 Échange effectué !");
   await updateQuestProgress('friend_trade');
 }
 function handleCancelTrade() {
@@ -671,30 +671,25 @@ function closeTradeModal() {
   currentTradeId = null;
 }
 
+function renderOtherOffer(offer) {
+  const container = document.getElementById('trade-other-cards');
+  container.innerHTML = '';
+  const rows = [
+    ...Object.entries(offer.cards).map(([cardId, qty]) => {
+      const card = allCards.find(c => c.id === cardId);
+      return `<div><img src="${card?.image || ''}" alt=""><span class="trade-card-name">${escapeHtml(cardLabel(card) || cardId)}</span><strong>x${qty}</strong></div>`;
+    }),
+    ...Object.entries(offer.boosters).filter(([, n]) => n > 0).map(([type, n]) =>
+      `<div><img src="assets/booster/booster.png" class="booster-thumb ${type}" alt=""><span class="trade-card-name">${BOOSTER_LABELS[type]}</span><strong>x${n}</strong></div>`)
+  ];
+  container.innerHTML = rows.length ? rows.join('') : "<span class='empty-msg'>Rien pour l'instant…</span>";
+}
+
 // ---------- INIT AUTO ----------
 window.onload = () => {
   if (document.getElementById('profile-username')) {
+    document.getElementById('friend-modal-close').onclick = closeFriendModal;
+    document.getElementById('friend-modal').addEventListener('click', (e) => { if (e.target.id === 'friend-modal') closeFriendModal(); });
     initializeProfilPage();
   }
 };
-function renderOtherOffer(cardsObj) {
-  const container = document.getElementById('trade-other-cards');
-  container.innerHTML = '';
-  if (!cardsObj || Object.keys(cardsObj).length === 0) {
-    container.innerHTML = "<span class='empty-msg'>Aucune carte proposée</span>";
-    return;
-  }
-  for (const [cardId, qty] of Object.entries(cardsObj)) {
-    if (qty > 0) {
-      const card = allCards.find(c => c.id === cardId);
-      const div = document.createElement('div');
-      div.style.opacity = 0.8;
-      div.innerHTML = `
-        <img src="${card?.image || ''}" alt="${card?.name || cardId}" />
-        x${qty}
-        <span class="friend-status">${card?.name || cardId}</span>
-      `;
-      container.appendChild(div);
-    }
-  }
-}

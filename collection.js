@@ -1,11 +1,8 @@
 // Fichier: collection.js (Version Finale Complète et Corrigée)
 
-import { doc, runTransaction, Timestamp, collection, increment } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
-import { db } from './firebase-config.js';
 import { protectPage } from './auth-manager.js';
-import { showToast, showConfirmDialog } from './toast.js';
+import { showConfirmDialog } from './toast.js';
 import { sellCardToConsole } from './marche.js';
-import { updateQuestProgress } from './quest-manager.js'; // Assurez-vous que marche.js exporte bien cette fonction
 
 // --- Éléments du DOM ---
 const collectionGrid = document.getElementById('collection-grid');
@@ -22,9 +19,7 @@ const sellCardName = document.getElementById('sell-card-name');
 const sellCardPreview = document.getElementById('sell-card-preview');
 const sellMaxQuantity = document.getElementById('sell-max-quantity');
 const sellPriceContainer = document.getElementById('sell-price-container');
-const sellMinPrice = document.getElementById('sell-min-price');
 const sellQuantityInput = document.getElementById('sell-quantity-input');
-const sellPriceInput = document.getElementById('sell-price-input');
 const confirmSellButton = document.getElementById('confirm-sell-button');
 const modalErrorMessage = document.getElementById('modal-error-message');
 
@@ -119,7 +114,8 @@ function openCardOverlay(card, cardData) {
     consoleSellButton.style.display = hasDuplicates ? 'block' : 'none';
 
     if (hasDuplicates) {
-        auctionButton.onclick = () => showAuctionForm(card, cardData);
+        // Enchère ou échange : on passe par l'Hôtel des Ventes, avec la carte déjà sélectionnée
+        auctionButton.onclick = () => { window.location.href = `marche.html?sell=${encodeURIComponent(card.id)}`; };
         consoleSellButton.onclick = () => showConsoleSellForm(card, cardData);
     }
     overlay.style.display = 'flex';
@@ -127,27 +123,6 @@ function openCardOverlay(card, cardData) {
 
 function closeOverlay() {
     overlay.style.display = 'none';
-}
-
-function showAuctionForm(card, cardData) {
-    viewMode.style.display = 'none';
-    sellMode.style.display = 'block';
-    const minPrice = { "Commune": 5, "Rare": 10, "epique": 25, "Légendaire": 100 };
-    const maxQuantity = cardData.quantity - 1;
-
-    sellCardName.textContent = `Mettre '${card.name}' aux enchères`;
-    sellCardPreview.innerHTML = `<img src="${card.image}" class="card-image">`;
-    sellCardPreview.className = `card rarity-${card.rarity.replace(/é/g, 'e').replace(/É/g, 'E')}`;
-    sellMaxQuantity.textContent = maxQuantity;
-    sellMinPrice.textContent = minPrice[card.rarity];
-    sellQuantityInput.max = maxQuantity;
-    sellQuantityInput.value = 1;
-    sellQuantityInput.min = 1;
-    sellPriceContainer.style.display = 'block';
-    sellPriceInput.min = minPrice[card.rarity];
-    sellPriceInput.value = minPrice[card.rarity];
-    confirmSellButton.textContent = "Confirmer la mise en vente";
-    confirmSellButton.onclick = () => createAuction(card, cardData);
 }
 
 function showConsoleSellForm(card, cardData) {
@@ -201,68 +176,6 @@ async function handleConsoleSell(card, cardData) {
     initializeCollection(); 
 }
 
-async function createAuction(card, cardData) {
-    const quantityToSell = parseInt(sellQuantityInput.value);
-    const startPrice = parseInt(sellPriceInput.value);
-    const minPrice = { "Commune": 5, "Rare": 10, "epique": 25, "Légendaire": 100 }[card.rarity];
-    const maxQuantity = cardData.quantity - 1;
-
-    if (!quantityToSell || quantityToSell <= 0 || quantityToSell > maxQuantity) {
-        modalErrorMessage.textContent = `La quantité doit être entre 1 et ${maxQuantity}.`;
-        return;
-    }
-    if (!startPrice || startPrice < minPrice) {
-        modalErrorMessage.textContent = `Le prix de départ doit être d'au moins ${minPrice} pièces.`;
-        return;
-    }
-
-    confirmSellButton.disabled = true;
-    modalErrorMessage.textContent = "Création de l'enchère...";
-
-    try {
-        const userDocRef = doc(db, "users", localUserData.uid);
-        await runTransaction(db, async (transaction) => {
-            const userDoc = await transaction.get(userDocRef);
-            if (!userDoc.exists()) throw new Error("Document utilisateur non trouvé.");
-            
-            const currentCollection = userDoc.data().collection || {};
-            if (!currentCollection[card.id] || currentCollection[card.id].quantity <= quantityToSell) {
-                throw new Error("Vous ne possédez pas assez de doubles de cette carte.");
-            }
-            
-            transaction.update(userDocRef, { [`collection.${card.id}.quantity`]: increment(-quantityToSell) });
-
-           
-            const endTime = Timestamp.fromMillis(Date.now() + 12 * 60 * 60 * 1000); 
-            const auctionData = {
-                sellerId: localUserData.uid,
-                sellerPseudo: localUserData.pseudo,
-                cardId: card.id,
-                quantity: quantityToSell,
-                startPrice: startPrice,
-                currentPrice: startPrice,
-                highestBidderId: null,
-                highestBidderPseudo: null,
-                endTime: endTime,
-                status: 'active'
-            };
-            const auctionsColRef = collection(db, "auctions");
-            transaction.set(doc(auctionsColRef), auctionData);
-        });
-
-        showToast("success", "Votre carte a été mise aux enchères avec succès !");
-        updateQuestProgress('create_auction');
-        closeOverlay();
-        initializeCollection();
-        
-    } catch (error) {
-        modalErrorMessage.textContent = `Erreur : ${error.message || error}`;
-    } finally {
-        confirmSellButton.disabled = false;
-    }
-}
-
-
 // --- FONCTION PRINCIPALE (RESTAURÉE) ---
 async function initializeCollection() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -281,6 +194,11 @@ async function initializeCollection() {
         if (set === 'v2') {
             const { allCardsV2 } = await import('./cards1.js');
             cardsToDisplay = allCardsV2;
+        } else if (set === 'v3') {
+            const { allCardsV3, V3_RELEASED } = await import('./cards-v3.js');
+            cardsToDisplay = allCardsV3;
+            // Avant la sortie : bandeau d'annonce
+            document.getElementById('v3-banner').hidden = V3_RELEASED;
         } else {
             const { allCards } = await import('./cards.js');
             cardsToDisplay = allCards;

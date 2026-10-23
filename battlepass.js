@@ -10,8 +10,9 @@ import { computeMaxStreak, normalizeBattlePass } from './quest-manager.js';
 import { getDayKey, getWeekKey, msUntilNextDay, msUntilNextWeek, formatDuration } from './daily-utils.js';
 import { allCards } from './cards.js';
 import { allCardsV2 } from './cards1.js';
+import { allCardsV3Released } from './cards-v3.js';
 
-const CARD_POOL = [...allCards, ...allCardsV2];
+const CARD_POOL = [...allCards, ...allCardsV2, ...allCardsV3Released];
 
 const trackContainer = document.querySelector('.pass-track');
 const trackScroll = document.querySelector('.pass-track-scroll');
