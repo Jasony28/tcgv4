@@ -1,0 +1,42 @@
+# Clôture automatique des enchères et échanges expirés de l'Hôtel des Ventes.
+# Remplace l'ancienne Cloud Function Firebase : gratuit, pas besoin du forfait Blaze.
+#
+# Prérequis (une seule fois) : le secret FIREBASE_SERVICE_ACCOUNT dans
+# GitHub → Settings → Secrets and variables → Actions, contenant la clé JSON générée dans
+# Firebase → Paramètres du projet → Comptes de service → Générer une nouvelle clé privée.
+#
+# Bon à savoir : GitHub peut décaler l'heure de passage de quelques minutes, et met les tâches
+# planifiées en pause après 60 jours sans activité sur le dépôt (réactivation en un clic dans
+# l'onglet Actions). Le site clôture aussi les annonces quand un joueur ouvre le marché.
+name: Clôture des enchères
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'   # toutes les 10 minutes
+  workflow_dispatch:           # bouton « Run workflow » pour lancer à la main
+
+concurrency:
+  group: close-auctions
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+      - name: Installer les dépendances
+        run: npm ci
+        working-directory: scripts
+      - name: Clôturer les annonces expirées
+        run: node scripts/close-auctions.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}

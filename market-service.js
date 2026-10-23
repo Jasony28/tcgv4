@@ -116,7 +116,7 @@ export async function createListing(seller, { mode, item, startPrice, wantedCard
         transaction.set(listingRef, {
             type: mode,
             item: cleanItem,
-            // Champs historiques, gardés pour les anciennes versions et la Cloud Function
+            // Champs historiques, gardés pour les anciennes annonces et la tâche GitHub Actions
             cardId: cleanItem.type === 'card' ? cleanItem.cardId : null,
             quantity,
             sellerId: seller.uid,
@@ -237,7 +237,7 @@ export async function cancelListing(seller, listingId) {
 
 /**
  * Clôture les annonces expirées (enchères gagnées, invendus rendus, échanges non conclus rendus).
- * Sans danger si plusieurs joueurs ou la Cloud Function le font en même temps : chaque annonce
+ * Sans danger si plusieurs joueurs ou la tâche GitHub Actions le font en même temps : chaque annonce
  * est relue dans sa transaction et n'est traitée que si elle est encore active.
  * @returns {Promise<Array<{listing:object, outcome:'sold'|'returned'}>>}
  */
