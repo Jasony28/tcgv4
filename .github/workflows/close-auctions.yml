@@ -14,6 +14,11 @@ on:
   schedule:
     - cron: '*/10 * * * *'   # toutes les 10 minutes
   workflow_dispatch:           # bouton « Run workflow » pour lancer à la main
+  push:                        # et à chaque modification du script (pour vérifier qu'il marche)
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - '.github/workflows/close-auctions.yml'
 
 concurrency:
   group: close-auctions
