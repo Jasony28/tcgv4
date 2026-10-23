@@ -10,7 +10,18 @@ if (!raw) {
     process.exit(1);
 }
 
-admin.initializeApp({ credential: admin.credential.cert(JSON.parse(raw)) });
+let account;
+try {
+    account = JSON.parse(raw);
+} catch {
+    console.error("Le secret FIREBASE_SERVICE_ACCOUNT n'est pas un JSON valide : recolle tout le fichier, de { à }.");
+    process.exit(1);
+}
+// Identifiant public de la clé (visible dans Google Cloud → Comptes de service → Clés), jamais la clé elle-même :
+// permet de vérifier quelle clé est utilisée si Google la refuse.
+console.log(`Projet : ${account.project_id} — clé utilisée : ${String(account.private_key_id || '?').slice(0, 8)}…`);
+
+admin.initializeApp({ credential: admin.credential.cert(account) });
 const db = admin.firestore();
 
 const results = await closeExpiredListings({
