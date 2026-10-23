@@ -6,6 +6,10 @@
 // Chaque annonce est relue dans sa transaction : si le site l'a déjà clôturée, on ne fait rien
 // (pas de double paiement, même si les deux tournent en même temps).
 
+// Taxe de l'Hôtel des Ventes (même valeur que MARKET_TAX_RATE dans market-service.js)
+const MARKET_TAX_RATE = 0.10;
+export const sellerProceeds = (price) => price - Math.ceil(price * MARKET_TAX_RATE);
+
 const BOOSTER_NAMES = {
     classic: 'Booster Classique', v2: 'Booster V2', v3: 'Booster V3', legendary: 'Booster Légendaire'
 };
@@ -62,7 +66,7 @@ export async function closeExpiredListings({ db, FieldValue, Timestamp, log = co
                     t.update(buyerRef, { [itemField(item)]: inc(item.quantity), ...bestUpdate(buyer.data(), 'bestPurchase', entry) });
                     if (seller.exists) {
                         t.update(sellerRef, {
-                            coins: inc(listing.currentPrice),
+                            coins: inc(sellerProceeds(listing.currentPrice)),
                             'stats.cardsSoldMarket': inc(1),
                             ...bestUpdate(seller.data(), 'bestSale', entry)
                         });

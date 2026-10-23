@@ -17,7 +17,7 @@ googleLoginButton.addEventListener('click', async () => {
         if (!userDoc.exists()) {
             console.log("Nouvel utilisateur via Google, création du profil...");
             await setDoc(userRef, {
-                pseudo: user.displayName, email: user.email, collection: {}, coins: 5,
+                pseudo: user.displayName, email: user.email, collection: {}, coins: 50,
                 dailyBoosterOpenedCount: 0, dailyLastReset: null, lastLoginQuestUpdate: null,
                 lastBoosterOpenQuestUpdate: null,
                 // Le Battle Pass est initialisé à la 1re connexion par quest-manager (normalizeBattlePass)

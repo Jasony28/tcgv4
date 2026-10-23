@@ -8,7 +8,7 @@ import { updateUserStats } from './stats-manager.js';
 import { updateQuestProgress } from './quest-manager.js';
 import {
     ALL_CARDS, BOOSTER_INFO, DURATIONS_HOURS, MAX_WANTED_CARDS,
-    findCard, cardLabel, getListingItem, getListingType, describeItem, minPriceFor,
+    findCard, cardLabel, getListingItem, getListingType, describeItem, minPriceFor, sellerProceeds, MARKET_TAX_RATE,
     createListing, placeBid, acceptTradeListing, cancelListing, finalizeExpiredListings, sellToConsole
 } from './market-service.js';
 
@@ -131,7 +131,7 @@ async function runFinalize() {
                 await updateQuestProgress('win_bid');
                 showToast('success', `🎉 Tu as remporté ${name} !`);
             }
-            if (listing.sellerId === me.uid) showToast('success', `💰 ${name} vendu pour ${listing.currentPrice} pièces !`);
+            if (listing.sellerId === me.uid) showToast('success', `💰 ${name} vendu pour ${listing.currentPrice} pièces (tu reçois ${sellerProceeds(listing.currentPrice)} après la taxe) !`);
         } else if (getListingType(listing) === 'auction') {
             await updateUserStats(listing.sellerId, { failedSales: 1 });
         }
@@ -264,6 +264,7 @@ function renderListingModal(listing) {
                 <div><span>Prix actuel</span><strong class="gold"><span class="coin-icon"></span>${listing.currentPrice}</strong></div>
                 <div><span>Meilleure offre</span><strong>${listing.highestBidderPseudo ? escapeHtml(listing.highestBidderPseudo) + (listing.highestBidderId === me.uid ? ' (toi)' : '') : '—'}</strong></div>
             </div>
+            ${mine ? `<p class="hint">Si l'enchère se termine maintenant, tu reçois <strong>${sellerProceeds(listing.currentPrice)}</strong> pièces (taxe de ${Math.round(MARKET_TAX_RATE * 100)} %).</p>` : ''}
             ${mine ? '' : `
             <div class="bid-form">
                 <input type="number" id="bid-amount-input" min="${minBid}" value="${minBid}" inputmode="numeric">
@@ -447,6 +448,7 @@ function renderCreate() {
             ${draft.mode === 'auction' ? `
                 <label class="field-label" for="price-input">Prix de départ ${item ? `(minimum ${min})` : ''}</label>
                 <input type="number" id="price-input" min="${min}" value="${draft.price || ''}" inputmode="numeric" ${item ? '' : 'disabled'}>
+                <p class="hint">Taxe de l'Hôtel des Ventes : ${Math.round(MARKET_TAX_RATE * 100)} % du prix final est prélevé à la vente. Les échanges ne sont pas taxés.</p>
             ` : `
                 <span class="field-label">Cartes que tu acceptes en échange (1 à ${MAX_WANTED_CARDS}) — <strong>${draft.wanted.length} choisie(s)</strong></span>
                 <input type="search" class="picker-search" id="want-search" placeholder="Chercher une carte…" value="${escapeHtml(draft.wantSearch)}">

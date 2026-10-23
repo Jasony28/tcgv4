@@ -1,13 +1,13 @@
 import { updateDoc, doc, getDoc, Timestamp, runTransaction, increment } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
 import { protectPage } from './auth-manager.js';
-import { allCards } from './cards.js';
 import { allCardsV2 } from './cards1.js';
 import { allCardsV3, V3_RELEASED } from './cards-v3.js';
 import { updateQuestProgress } from './quest-manager.js';
 import { updateUserStats } from './stats-manager.js';
 import { showToast } from './toast.js';
 import { getDayKey } from './daily-utils.js';
+import { DAILY_BOOSTER_LIMIT, LEGENDARY_CHANCE, drawClassicBoosterCards, drawLegendaryBoosterCards } from './booster-draws.js';
 
 // --- Éléments du DOM ---
 const boosterStatusEl = document.getElementById('booster-status');
@@ -23,7 +23,7 @@ const legendaryBoosterCountEl = document.getElementById('legendary-booster-count
 const legendaryBoosterOpener = document.getElementById('legendary-booster-opener');
 // Message affiché pendant la révélation (booster-status est caché avec la sélection de boosters)
 const revealStatusEl = document.getElementById('reveal-status');
-const DAILY_BOOSTER_LIMIT = 5;
+// Nombre de boosters gratuits et contenu des boosters : voir booster-draws.js
 
 let userData;
 
@@ -152,9 +152,9 @@ async function openBooster(boosterType) {
     if (drawBoosterType === 'legendary') {
         drawnCards = drawLegendaryBoosterCards();
     } else if (drawBoosterType === 'v3') {
-        drawnCards = drawClassicBoosterCards(allCardsV3);
+        drawnCards = drawClassicBoosterCards(allCardsV3, LEGENDARY_CHANCE.v3);
     } else if (drawBoosterType === 'v2') {
-        drawnCards = drawClassicBoosterCards(allCardsV2);
+        drawnCards = drawClassicBoosterCards(allCardsV2, LEGENDARY_CHANCE.v2);
     } else {
         drawnCards = drawClassicBoosterCards();
     }
@@ -257,37 +257,6 @@ function startProgressiveReveal(cards, isNew = []) {
 
     displayCard(cards[currentCardIndex], currentCardIndex);
     revealSlot.addEventListener('click', revealNextCardHandler);
-}
-
-// Même composition pour le booster classique (V1) et le booster V2 : seul le set de cartes change
-function drawClassicBoosterCards(cardSet = allCards) {
-    const commons = cardSet.filter(c => c.rarity === 'Commune');
-    const rares = cardSet.filter(c => c.rarity === 'Rare');
-    const epics = cardSet.filter(c => c.rarity === 'epique');
-    const legendaries = cardSet.filter(c => c.rarity === 'Légendaire');
-    const drawn = [];
-    for (let i = 0; i < 3; i++) { drawn.push(commons[Math.floor(Math.random() * commons.length)]); }
-    drawn.push(rares[Math.floor(Math.random() * rares.length)]);
-    const fifthCardRoll = Math.random();
-    if (fifthCardRoll < 0.10) {
-        drawn.push(legendaries[Math.floor(Math.random() * legendaries.length)]);
-    } else if (fifthCardRoll < 0.55) {
-        drawn.push(epics[Math.floor(Math.random() * epics.length)]);
-    } else {
-        drawn.push(rares[Math.floor(Math.random() * rares.length)]);
-    }
-    return drawn;
-}
-
-function drawLegendaryBoosterCards() {
-    const commons = allCards.filter(c => c.rarity === 'Commune');
-    const rares = allCards.filter(c => c.rarity === 'Rare');
-    const legendaries = allCards.filter(c => c.rarity === 'Légendaire');
-    const commonAndRares = [...commons, ...rares];
-    const drawn = [];
-    for (let i = 0; i < 4; i++) { drawn.push(commonAndRares[Math.floor(Math.random() * commonAndRares.length)]); }
-    drawn.push(legendaries[Math.floor(Math.random() * legendaries.length)]);
-    return drawn.sort(() => Math.random() - 0.5);
 }
 
 async function checkAndResetDailyCounter() {

@@ -24,6 +24,12 @@ export const BOOSTER_INFO = {
 };
 export const CARD_MIN_PRICES = { 'Commune': 5, 'Rare': 10, 'epique': 25, 'Légendaire': 100 };
 
+// Taxe de l'Hôtel des Ventes sur les enchères vendues : ces pièces sortent du jeu,
+// ce qui évite que la monnaie s'accumule sans fin (inflation). Même valeur dans scripts/close-logic.mjs.
+export const MARKET_TAX_RATE = 0.10;
+/** Ce que le vendeur touche réellement pour une vente à `price` pièces (taxe arrondie au-dessus). */
+export const sellerProceeds = (price) => price - Math.ceil(price * MARKET_TAX_RATE);
+
 export const findCard = (cardId) => ALL_CARDS.find(c => c.id === cardId);
 
 /** Nom affiché : "Nicolas (V2)" pour distinguer les cartes du même nom entre collections */
@@ -266,7 +272,7 @@ export async function finalizeExpiredListings() {
                 if (buyerDoc?.exists()) {
                     // Enchère gagnée
                     transaction.update(buyerRef, { [itemField(item)]: increment(item.quantity) });
-                    if (sellerDoc.exists()) transaction.update(sellerRef, { coins: increment(listing.currentPrice) });
+                    if (sellerDoc.exists()) transaction.update(sellerRef, { coins: increment(sellerProceeds(listing.currentPrice)) });
                     outcome = 'sold';
                 } else {
                     // Personne (ou acheteur supprimé) : l'objet revient au vendeur

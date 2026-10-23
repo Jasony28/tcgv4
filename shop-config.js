@@ -25,7 +25,7 @@ export const SHOP_CARD_PRICES = { 'Commune': 10, 'Rare': 25, 'epique': 60, 'Lég
 
 export const SHOP_BOOSTERS = {
     classic: { name: 'Booster Classique', price: 20, dailyLimit: 3, description: '3 communes, 1 rare, 1 carte bonus' },
-    v2: { name: 'Booster V2', price: 30, dailyLimit: 2, description: 'Cartes de la collection V2' },
+    v2: { name: 'Booster V2', price: 30, dailyLimit: 2, description: 'Collection V2 · 25 % de chance de légendaire' },
     ...(V3_RELEASED ? { v3: { name: 'Booster V3', price: 35, dailyLimit: 2, description: 'Cartes de la collection V3' } } : {}),
     legendary: { name: 'Booster Légendaire', price: 90, dailyLimit: 1, description: '1 légendaire garantie' }
 };
