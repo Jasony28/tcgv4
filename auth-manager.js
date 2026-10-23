@@ -1,9 +1,35 @@
 // Fichier: auth-manager.js (Version centralisée et finale)
 import { onAuthStateChanged, signOut, getAuth } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
-import { doc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+import { doc, getDoc, onSnapshot, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
+import { updateQuestProgress } from './quest-manager.js';
+import { getAchievementsStatus } from './achievements-config.js';
+import { showToast } from './toast.js';
 
 const auth = getAuth();
+
+/**
+ * Pastille sur le bouton Profil quand un succès est prêt, + une notification la 1re fois
+ * qu'il se débloque (mémorisée sur l'appareil pour ne pas la répéter à chaque page).
+ */
+function checkAchievements(uid, userData) {
+    const ready = getAchievementsStatus(userData).filter(a => a.unlocked && !a.claimed);
+    document.getElementById('profil-link')?.classList.toggle('has-dot', ready.length > 0);
+
+    const key = `ach-notified-${uid}`;
+    let notified = [];
+    try { notified = JSON.parse(localStorage.getItem(key) || '[]'); } catch { /* stockage indisponible */ }
+    const fresh = ready.filter(a => !notified.includes(a.id));
+    for (const a of fresh) {
+        showToast('success', `🏅 Succès débloqué : ${a.title} ! Réclame ta récompense dans ton profil.`, 5000);
+    }
+    if (fresh.length) {
+        try { localStorage.setItem(key, JSON.stringify([...notified, ...fresh.map(a => a.id)])); } catch { /* ignoré */ }
+    }
+}
+
+// Un seul écouteur temps réel par page (protectPage peut être appelée plusieurs fois)
+let userDataUnsubscribe = null;
 
 /**
  * Met à jour le header (pseudo, pièces) et attache l'événement de déconnexion.
@@ -21,13 +47,13 @@ function updateHeaderUI(userData) {
     if (coinAmountEl && userData?.coins !== undefined) {
         coinAmountEl.textContent = userData.coins;
     }
-    
+
     // Logique de déconnexion centralisée
     if (logoutButton) {
         // Astuce pour éviter d'ajouter plusieurs écouteurs si la fonction est appelée plusieurs fois
         const newLogoutButton = logoutButton.cloneNode(true);
         logoutButton.parentNode.replaceChild(newLogoutButton, logoutButton);
-        
+
         newLogoutButton.addEventListener('click', () => {
             signOut(auth).then(() => {
                 console.log('Utilisateur déconnecté');
@@ -45,11 +71,13 @@ function updateHeaderUI(userData) {
  * @param {string} uid - L'ID de l'utilisateur.
  */
 function listenToUserData(uid) {
+    if (userDataUnsubscribe) return;
     const userDocRef = doc(db, "users", uid);
     // onSnapshot met à jour l'UI automatiquement dès qu'une donnée change dans Firestore
-    onSnapshot(userDocRef, (doc) => {
+    userDataUnsubscribe = onSnapshot(userDocRef, (doc) => {
         if (doc.exists()) {
             updateHeaderUI(doc.data());
+            checkAchievements(uid, doc.data());
         }
     });
 }
@@ -67,10 +95,14 @@ export function protectPage() {
                 const userDocRef = doc(db, "users", user.uid);
                 const userDoc = await getDoc(userDocRef);
                 if (userDoc.exists()) {
-                    const userData = { uid: user.uid, ...userDoc.data() };
+                    // Présence (affichée dans la liste d'amis) + quête "connecte-toi X jours"
+                    updateDoc(userDocRef, { lastOnline: serverTimestamp() }).catch(console.error);
+                    await updateQuestProgress('daily_login_streak');
+                    const freshDoc = await getDoc(userDocRef);
+                    const userData = { uid: user.uid, ...freshDoc.data() };
                     // On ne lance la mise à jour et l'écouteur QUE depuis cet endroit
-                    updateHeaderUI(userData); 
-                    listenToUserData(user.uid); 
+                    updateHeaderUI(userData);
+                    listenToUserData(user.uid);
                     resolve(userData);
                 } else {
                     // Si l'utilisateur existe dans Auth mais pas dans Firestore (cas rare), on le déconnecte

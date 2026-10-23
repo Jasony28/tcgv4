@@ -35,11 +35,20 @@ onSchedule('every 5 minutes', async (event) => {
   const promises = [];
 
   expiredAuctions.forEach((doc) => {
-    const auction = doc.data();
     const auctionRef = doc.ref;
 
     const promise = db.runTransaction(async (transaction) => {
+      // On relit l'enchère dans la transaction : un client (marche.js)
+      // a peut-être déjà finalisé ou annulé l'enchère entre-temps.
+      // Sans ça, le vendeur serait payé deux fois.
+      const auctionSnap = await transaction.get(auctionRef);
+      if (!auctionSnap.exists) return;
+      const auction = auctionSnap.data();
+      if (auction.status !== 'active') return;
+
       const sellerRef = db.collection('users').doc(auction.sellerId);
+      const sellerSnap = await transaction.get(sellerRef);
+      const cardPath = `collection.${auction.cardId}.quantity`;
 
       if (auction.highestBidderId) {
         // --- CAS 1: VENTE RÉUSSIE ---
@@ -49,33 +58,38 @@ onSchedule('every 5 minutes', async (event) => {
         console.log(bidLog);
         const buyerRef =
           db.collection('users').doc(auction.highestBidderId);
+        const buyerSnap = await transaction.get(buyerRef);
 
-        // 1. Donner la carte au gagnant
-        const buyerCardPath = `collection.${auction.cardId}.quantity`;
-        transaction.update(buyerRef, {
-          [buyerCardPath]: admin.firestore.FieldValue.increment(
-            auction.quantity
-          ),
-        });
+        if (buyerSnap.exists) {
+          // 1. Donner la carte au gagnant
+          transaction.update(buyerRef, {
+            [cardPath]: admin.firestore.FieldValue.increment(
+              auction.quantity
+            ),
+          });
+        }
 
         // 2. Donner l'argent au vendeur
-        transaction.update(sellerRef, {
-          coins: admin.firestore.FieldValue.increment(
-            auction.currentPrice
-          ),
-        });
+        if (sellerSnap.exists) {
+          transaction.update(sellerRef, {
+            coins: admin.firestore.FieldValue.increment(
+              auction.currentPrice
+            ),
+          });
+        }
       } else {
         // --- CAS 2: VENTE ÉCHOUÉE (pas d'enchérisseur) ---
         console.log(
           `Enchère ${doc.id} expirée sans enchérisseur.`
         );
         // 1. Rendre la carte au vendeur
-        const sellerCardPath = `collection.${auction.cardId}.quantity`;
-        transaction.update(sellerRef, {
-          [sellerCardPath]: admin.firestore.FieldValue.increment(
-            auction.quantity
-          ),
-        });
+        if (sellerSnap.exists) {
+          transaction.update(sellerRef, {
+            [cardPath]: admin.firestore.FieldValue.increment(
+              auction.quantity
+            ),
+          });
+        }
       }
 
       transaction.update(auctionRef, {status: 'ended'});

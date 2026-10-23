@@ -2,22 +2,17 @@
     "name": "TCG JWBnDr",
     "short_name": "JWBnDr",
     "description": "Jeu de cartes à collectionner digital par JWBnDr.",
-    "scope": "/TCG-jason/",
-    "start_url": "/TCG-jason/index.html",
+    "scope": "./",
+    "start_url": "./index.html",
     "display": "standalone",
-    "background_color": "#f0f8ff",
-    "theme_color": "#7b9acc",
+    "background_color": "#0a1224",
+    "theme_color": "#0a1224",
     "orientation": "portrait-primary",
     "icons": [
         {
             "src": "./assets/logo/logo.png",
             "type": "image/png",
-            "sizes": "192x192"
-        },
-        {
-            "src": "/TCG-jason/assets/logo/icon-512.png",
-            "type": "image/png",
-            "sizes": "512x512"
+            "sizes": "1024x1024"
         }
     ]
 }

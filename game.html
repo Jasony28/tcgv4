@@ -2,16 +2,23 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Booster - JWBnDr</title>
     <link rel="stylesheet" href="main.css">
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#7b9acc">
+    <meta name="theme-color" content="#0a1224">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="JWBnDr">
+    <link rel="apple-touch-icon" href="assets/logo/logo.png">
+    <link rel="icon" href="assets/logo/logo.png">
 </head>
 <body>
    <header class="main-header"></header>
     <main class="game-container">
         <h2>Ouvrir un Booster</h2>
+        <p class="page-subtitle">Touche un booster pour l'ouvrir</p>
         <div id="booster-selection-container">
             <div id="daily-booster-area" class="booster-option" style="display: none;">
                 <p id="booster-status">...</p>
@@ -33,21 +40,28 @@
                     <span class="inventory-count" id="legendary-booster-count">x0</span>
                 </div>
             </div>
+            <div id="v2-booster-area" class="booster-option" style="display: none;">
+                <p>Boosters V2</p>
+                <div class="inventory-booster-pack" id="v2-booster-opener">
+                    <img src="assets/booster/booster.png" alt="Booster V2">
+                    <span class="v2-tag">V2</span>
+                    <span class="inventory-count" id="v2-booster-count">x0</span>
+                </div>
+            </div>
+            <a href="boutique.html" class="shop-cta">🛒 Plus de boosters à la boutique</a>
         </div>
+        <p id="reveal-status" class="reveal-status" style="display:none;"></p>
         <div id="card-reveal-area" class="card-grid" style="display:none;"></div>
     </main>
-    <script type="module" src="game.js"></script>
-    <script type="module" src="toast.js"></script>
+    <div id="toast-container"></div>
     <script type="module" src="header.js"></script>
-    <!-- 
+    <script type="module" src="game.js"></script>
     <script>
-        // Désactive temporairement le Service Worker si besoin
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./service-worker.js');
             });
         }
     </script>
-    -->
 </body>
 </html>

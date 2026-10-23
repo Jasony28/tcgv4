@@ -2,16 +2,23 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Marché - JWBnDr</title>
     <link rel="stylesheet" href="main.css">
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#7b9acc">
+    <meta name="theme-color" content="#0a1224">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="JWBnDr">
+    <link rel="apple-touch-icon" href="assets/logo/logo.png">
+    <link rel="icon" href="assets/logo/logo.png">
 </head>
 <body>
     <header class="main-header"></header>
     <main class="collection-container">
         <h2>Marché des Enchères</h2>
+        <p class="page-subtitle">Mise sur les cartes des autres joueurs</p>
         <p id="no-auctions-message" style="display: none;">Il n'y a aucune enchère pour le moment.</p>
         <div id="auctions-grid" class="card-grid"></div>
     </main>
@@ -40,28 +47,6 @@
         </div>
     </div>
 </div>
-    <script type="module" src="marche.js"></script>
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./service-worker.js');
-            });
-        }
-    </script>
-     <script type="module" src="header.js"></script> <script type="module" src="toast.js"></script>
-    <script>
-        /* On désactive temporairement le Service Worker pour tester la connexion Google
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./service-worker.js');
-        });
-    }
-    */
-    </script>
-    <script type="module" src="marche.js"></script>
-<script type="module" src="toast.js"></script>
-<script type="module" src="header.js"></script>
-
 <div id="toast-container"></div>
 <!-- Modale de confirmation universelle pour showConfirmDialog -->
 <div id="custom-modal" class="modal" style="display:none;">
@@ -73,5 +58,14 @@
   </div>
 </div>
 
+    <script type="module" src="header.js"></script>
+    <script type="module" src="marche.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js');
+            });
+        }
+    </script>
 </body>
 </html>

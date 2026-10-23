@@ -2,17 +2,40 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Mon Album - JWBnDr</title>
     <link rel="stylesheet" href="main.css">
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#7b9acc">
+    <meta name="theme-color" content="#0a1224">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="JWBnDr">
+    <link rel="apple-touch-icon" href="assets/logo/logo.png">
+    <link rel="icon" href="assets/logo/logo.png">
     
 </head>
 <body>
     <header class="main-header"></header>
     <main class="collection-container">
         <h2>Ma Collection</h2>
+        <div class="collection-progress">
+            <div class="progress-head">
+                <span><strong id="collection-count">0 / 0</strong> cartes</span>
+                <span id="collection-pct">0%</span>
+            </div>
+            <div class="xp-bar"><div class="xp-bar-fill" id="collection-fill"></div></div>
+        </div>
+        <a href="profil.html#succes" class="album-achievements" id="album-achievements" title="Voir les succès"></a>
+        <div class="filter-chips" id="collection-filters">
+            <button class="chip active" data-filter="all">Toutes</button>
+            <button class="chip" data-filter="owned">Possédées</button>
+            <button class="chip" data-filter="missing">Manquantes</button>
+            <button class="chip" data-filter="Commune">Communes</button>
+            <button class="chip" data-filter="Rare">Rares</button>
+            <button class="chip" data-filter="epique">Épiques</button>
+            <button class="chip" data-filter="Légendaire">Légendaires</button>
+        </div>
         <div id="collection-grid" class="card-grid"></div>
     </main>
     <div id="card-overlay" class="overlay" style="display:none;">
@@ -53,6 +76,7 @@
     </div>
 
     <!-- Scripts APRES le HTML -->
+    <script type="module" src="header.js"></script>
     <script type="module" src="collection.js"></script>
     <script>
         if ('serviceWorker' in navigator) {
@@ -61,16 +85,5 @@
             });
         }
     </script>
-     <script type="module" src="header.js"></script> <script type="module" src="toast.js"></script>
-    <script>
-        /* On désactive temporairement le Service Worker pour tester la connexion Google
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./service-worker.js');
-        });
-    }
-    */
-    </script>
-    <script type="module" src="toast.js"></script>
 </body>
 </html>

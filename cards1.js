@@ -6,11 +6,11 @@ export const allCardsV2 = [
   { id: 'V2_C02', name: 'Discord', rarity: 'Commune', image: 'assets/cards2/Discord.png', version: 'v2' },
 
   // Rares
-  { id: 'V2_R01', name: 'Bmw M2', rarity: 'Rare', image: 'assets/cards2/Bmw M2.png', version: 'v2' },
+  { id: 'V2_R01', name: 'Bmw M2', rarity: 'Rare', image: 'assets/cards2/BmwM2.png', version: 'v2' },
   { id: 'V2_R02', name: 'Gt3 rs', rarity: 'Rare', image: 'assets/cards2/Gt3rs.png', version: 'v2' },
 
   // Épiques
-  { id: 'V2_E01', name: 'Les 3 joueurs', rarity: 'Épique', image: 'assets/cards2/Les3joueurs.png', version: 'v2' },
+  { id: 'V2_E01', name: 'Les 3 joueurs', rarity: 'epique', image: 'assets/cards2/Les3joueurs.png', version: 'v2' },
 
   // Légendaires
   { id: 'V2_L01', name: 'Benjamin', rarity: 'Légendaire', image: 'assets/cards2/Benjamin.png', version: 'v2' },

@@ -1,5 +1,5 @@
-import { getAuth, GoogleAuthProvider, signInWithPopup, getAdditionalUserInfo } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
-import { doc, setDoc } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+import { GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
+import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { auth, db } from './firebase-config.js';
 
 const googleLoginButton = document.getElementById('google-login-button');
@@ -10,15 +10,19 @@ googleLoginButton.addEventListener('click', async () => {
     try {
         const result = await signInWithPopup(auth, provider);
         const user = result.user;
-        const additionalUserInfo = getAdditionalUserInfo(result);
-        if (additionalUserInfo.isNewUser) {
+        // On vérifie l'existence du profil plutôt que "isNewUser" : si la création avait échoué
+        // la première fois, le joueur restait bloqué (déconnecté en boucle par protectPage).
+        const userRef = doc(db, "users", user.uid);
+        const userDoc = await getDoc(userRef);
+        if (!userDoc.exists()) {
             console.log("Nouvel utilisateur via Google, création du profil...");
-            await setDoc(doc(db, "users", user.uid), {
+            await setDoc(userRef, {
                 pseudo: user.displayName, email: user.email, collection: {}, coins: 5,
-                dailyBoosterOpenedCount: 0, lastBoosterResetDate: null, lastLoginQuestUpdate: null,
+                dailyBoosterOpenedCount: 0, dailyLastReset: null, lastLoginQuestUpdate: null,
                 lastBoosterOpenQuestUpdate: null,
-                battlePass: { seasonId: 1, xp: 0, questProgress: {}, claimedRewards: {} },
-                boosterInventory: { classic: 0, legendary: 0 }
+                // Le Battle Pass est initialisé à la 1re connexion par quest-manager (normalizeBattlePass)
+                battlePass: { seasonId: null, xp: 0, questProgress: {}, claimedRewards: {} },
+                boosterInventory: { classic: 0, legendary: 0, v2: 0 }
             });
         }
         window.location.href = 'game.html';

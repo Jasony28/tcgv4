@@ -1,29 +1,41 @@
-// Fichier: service-worker.js (Version finale avec les bons chemins)
+// Fichier: service-worker.js
 
-const CACHE_NAME = 'tcg-gemini-cache-v3.2.72'; // Version majeure, pour être sûr
+const CACHE_NAME = 'tcg-gemini-cache-v5.1.0';
 
-// CORRECTION : On retire le préfixe du dossier. Les chemins doivent être absolus depuis la racine.
+// Chemins relatifs à l'emplacement du service worker : fonctionne à la racine
+// du domaine comme dans un sous-dossier (ex: GitHub Pages /TCG-jason/).
 const urlsToCache = [
-    '/', // La racine, qui sert généralement index.html
-    '/index.html',
-    '/game.html',
-    '/collection.html',
-    '/marche.html',
-    '/battlepass.html',
-    '/main.css',
-    '/firebase-config.js',
-    '/cards.js',
-    '/auth.js',
-    '/auth-manager.js',
-    '/collection.js',
-    '/game.js',
-    '/marche.js',
-    '/battlepass.js',
-    '/battlepass-config.js',
-    '/quest-manager.js',
-    '/toast.js',
-    '/assets/card-back/dos.png',
-    '/assets/logo/logo.png'
+    './',
+    './index.html',
+    './game.html',
+    './collection.html',
+    './marche.html',
+    './battlepass.html',
+    './profil.html',
+    './boutique.html',
+    './boutique.js',
+    './shop-config.js',
+    './daily-utils.js',
+    './achievements-config.js',
+    './achievements.js',
+    './main.css',
+    './firebase-config.js',
+    './cards.js',
+    './cards1.js',
+    './auth.js',
+    './auth-manager.js',
+    './header.js',
+    './collection.js',
+    './game.js',
+    './marche.js',
+    './profil.js',
+    './battlepass.js',
+    './battlepass-config.js',
+    './quest-manager.js',
+    './stats-manager.js',
+    './toast.js',
+    './assets/card-back/dos.png',
+    './assets/logo/logo.png'
 ];
 
 self.addEventListener('install', event => {
@@ -43,14 +55,22 @@ self.addEventListener('activate', event => {
         return Promise.all(
             cacheNames.filter(name => name !== CACHE_NAME).map(name => caches.delete(name))
         );
-    }));
+    }).then(() => self.clients.claim()));
 });
 
+// Réseau d'abord (pour toujours avoir la dernière version du jeu), cache en secours hors-ligne.
+// Seules les requêtes GET de notre propre site passent par le cache (Firebase/Google restent directs).
 self.addEventListener('fetch', event => {
+    const request = event.request;
+    if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
+
     event.respondWith(
-        caches.match(event.request).then(response => {
-            // S'il y a une réponse en cache, on la sert, sinon on fait une requête réseau.
-            return response || fetch(event.request);
-        })
+        fetch(request).then(response => {
+            if (response.ok) {
+                const copy = response.clone();
+                caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+            }
+            return response;
+        }).catch(() => caches.match(request))
     );
 });

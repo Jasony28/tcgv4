@@ -3,7 +3,8 @@ from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 
 import { db } from './firebase-config.js';
 import { protectPage } from './auth-manager.js';
-import { allCards } from './cards.js';
+import { allCards as allCardsV1 } from './cards.js';
+import { allCardsV2 } from './cards1.js';
 import { showToast, showConfirmDialog } from './toast.js';
 import { updateUserStats } from './stats-manager.js'; // ou le fichier où tu mets la fonction
 import { getAuth } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
@@ -16,6 +17,14 @@ let unsubscribeBidListener = null;
 const auctionsGrid = document.getElementById('auctions-grid');
 const noAuctionsMessage = document.getElementById('no-auctions-message');
 const bidModal = document.getElementById('bid-modal');
+
+// Les deux collections (V1 + V2) : sinon les enchères de cartes V2 n'apparaissaient jamais
+const allCards = [...allCardsV1, ...allCardsV2];
+
+// Les pseudos sont choisis par les joueurs : on les échappe avant de les insérer en HTML
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
 
 function normalizeRarity(rawRarity) {
   if (!rawRarity) return '';
@@ -142,6 +151,7 @@ function openBidModal(auction, card) {
 // Modale pour gérer SA PROPRE enchère (avec bouton Annuler)
 function openOwnAuctionModal(auction, card) {
     document.querySelector('.bid-form').style.display = 'none';
+    document.getElementById('modal-error-message').textContent = '';
 
     document.getElementById('modal-card-name').textContent = `${card.name} (x${auction.quantity})`;
     document.getElementById('modal-card-preview').innerHTML = `<img src="${card.image}" class="card-image">`;
@@ -174,52 +184,104 @@ async function finalizeExpiredAuctions() {
   const snapshot = await getDocs(q);
 
   for (const docSnap of snapshot.docs) {
-    const data = docSnap.data();
     const auctionRef = doc(db, "auctions", docSnap.id);
+    let data = null;
 
-    await runTransaction(db, async (transaction) => {
-      const sellerRef = doc(db, "users", data.sellerId);
-      const sellerDoc = await transaction.get(sellerRef);
+    let finalized = false;
+    try {
+      await runTransaction(db, async (transaction) => {
+        finalized = false;
+        // On relit l'enchère DANS la transaction : un autre joueur (ou la Cloud Function)
+        // a pu la finaliser entre-temps. Sans ce contrôle, le vendeur était payé plusieurs fois.
+        const auctionDoc = await transaction.get(auctionRef);
+        if (!auctionDoc.exists() || auctionDoc.data().status !== 'active') return;
+        data = auctionDoc.data();
 
-      // Vérif : si vendeur supprimé, on termine juste l'enchère, pas d'update vendeur
-      if (!sellerDoc.exists()) {
-        transaction.update(auctionRef, { status: 'ended' });
-        return;
-      }
+        const sellerRef = doc(db, "users", data.sellerId);
+        const sellerDoc = await transaction.get(sellerRef);
+        const buyerRef = data.highestBidderId ? doc(db, "users", data.highestBidderId) : null;
+        const buyerDoc = buyerRef ? await transaction.get(buyerRef) : null;
+        const cardPath = `collection.${data.cardId}.quantity`;
 
-      // Si vente réussie
-      if (data.highestBidderId) {
-        const buyerRef = doc(db, "users", data.highestBidderId);
-        const buyerDoc = await transaction.get(buyerRef);
-
-        // Vérif : si l'acheteur est supprimé, rembourse juste le vendeur et termine l'enchère
-        if (!buyerDoc.exists()) {
-          transaction.update(sellerRef, { coins: increment(data.currentPrice) });
+        // Vérif : si vendeur supprimé, on rembourse l'enchérisseur et on termine l'enchère
+        if (!sellerDoc.exists()) {
+          if (buyerDoc?.exists()) transaction.update(buyerRef, { coins: increment(data.currentPrice) });
           transaction.update(auctionRef, { status: 'ended' });
           return;
         }
 
-        const buyerCollectionPath = `collection.${data.cardId}.quantity`;
-        transaction.update(buyerRef, { [buyerCollectionPath]: increment(data.quantity) });
-        transaction.update(sellerRef, { coins: increment(data.currentPrice) });
-        transaction.update(auctionRef, { status: 'ended' });
-        // On peut placer updateQuestProgress('win_bid') APRES la transaction hors du bloc
-      } else {
-        // Vente échouée
-        const returnPath = `collection.${data.cardId}.quantity`;
-        transaction.update(sellerRef, { [returnPath]: increment(data.quantity) });
-        transaction.update(auctionRef, { status: 'ended' });
-      }
-    });
+        // Si vente réussie
+        if (data.highestBidderId) {
+          // Vérif : si l'acheteur est supprimé, on paie quand même le vendeur et on termine l'enchère
+          if (!buyerDoc.exists()) {
+            transaction.update(sellerRef, { coins: increment(data.currentPrice) });
+            transaction.update(auctionRef, { status: 'ended' });
+            return;
+          }
+
+          transaction.update(buyerRef, { [cardPath]: increment(data.quantity) });
+          transaction.update(sellerRef, { coins: increment(data.currentPrice) });
+          transaction.update(auctionRef, { status: 'ended' });
+        } else {
+          // Vente échouée
+          transaction.update(sellerRef, { [cardPath]: increment(data.quantity) });
+          transaction.update(auctionRef, { status: 'ended' });
+        }
+        finalized = true;
+      });
+    } catch (e) {
+      console.error("Erreur finalisation enchère :", e);
+      continue;
+    }
+
+    if (!finalized) continue;
 
     // Statistiques (hors transaction)
     if (data.highestBidderId) {
       await handleSuccessfulMarketSale(data.sellerId, data.cardId, data.currentPrice);
       await handleSuccessfulMarketPurchase(data.highestBidderId, data.cardId, data.currentPrice);
-      await updateQuestProgress('win_bid');
+      // La quête ne peut être créditée qu'au joueur connecté : seulement s'il est le gagnant
+      // (avant, c'était n'importe quel visiteur du marché qui la recevait).
+      if (data.highestBidderId === localUserData?.uid) {
+        await updateQuestProgress('win_bid');
+      }
     } else {
       await updateUserStats(data.sellerId, { failedSales: 1 });
     }
+  }
+}
+
+// Annulation de sa propre enchère : la carte revient au vendeur, le meilleur enchérisseur est remboursé
+async function handleCancelAuction(auction) {
+  const ok = await showConfirmDialog({
+    title: "Annuler l'enchère",
+    message: "Voulez-vous vraiment annuler cette enchère ? La carte vous sera rendue et le meilleur enchérisseur remboursé.",
+    confirmText: "Oui, annuler",
+    cancelText: "Non"
+  });
+  if (!ok) return;
+
+  const auctionRef = doc(db, "auctions", auction.id);
+  try {
+    await runTransaction(db, async (transaction) => {
+      const auctionDoc = await transaction.get(auctionRef);
+      if (!auctionDoc.exists()) throw new Error("Enchère introuvable.");
+      const data = auctionDoc.data();
+      if (data.sellerId !== localUserData.uid) throw new Error("Ce n'est pas votre enchère.");
+      if (data.status !== 'active') throw new Error("Cette enchère est déjà terminée.");
+
+      if (data.highestBidderId) {
+        transaction.update(doc(db, "users", data.highestBidderId), { coins: increment(data.currentPrice) });
+      }
+      transaction.update(doc(db, "users", data.sellerId), { [`collection.${data.cardId}.quantity`]: increment(data.quantity) });
+      transaction.update(auctionRef, { status: 'cancelled' });
+    });
+    showToast("success", "Enchère annulée, la carte vous a été rendue.");
+    closeBidModal();
+    fetchAndDisplayAuctions();
+  } catch (error) {
+    showToast("error", error.message || "Erreur lors de l'annulation.");
+    console.error("Erreur annulation enchère :", error);
   }
 }
 
@@ -248,7 +310,7 @@ function fetchAndDisplayBidHistory(auctionId) {
       snapshot.forEach(doc => {
         const bid = doc.data();
         const li = document.createElement('li');
-        li.innerHTML = `<strong>${bid.bidderPseudo}</strong> a enchéri <strong>${bid.amount}</strong> pièces`;
+        li.innerHTML = `<strong>${escapeHtml(bid.bidderPseudo)}</strong> a enchéri <strong>${escapeHtml(bid.amount)}</strong> pièces`;
         bidHistoryList.appendChild(li);
       });
     }
@@ -318,19 +380,31 @@ async function handlePlaceBid(auction) {
       const userData = userDoc.data();
       const auctionData = auctionDoc.data();
 
+      // Contrôles sur les données à jour (le prix affiché a pu changer depuis l'ouverture de la modale)
+      if (auctionData.sellerId === user.uid) throw new Error("Tu ne peux pas miser sur ta propre enchère.");
+      if (auctionData.endTime.toMillis() <= Date.now()) throw new Error("Cette enchère est terminée.");
+      if (bidAmount <= auctionData.currentPrice) {
+        throw new Error(`Quelqu'un a déjà misé plus ! (minimum ${auctionData.currentPrice + 1})`);
+      }
+
+      // Si on est déjà le meilleur enchérisseur, notre ancienne mise est rendue :
+      // on ne paie que la différence (avant, l'ancienne mise était perdue).
+      const alreadyHighest = auctionData.highestBidderId === user.uid;
+      const cost = alreadyHighest ? bidAmount - auctionData.currentPrice : bidAmount;
+
       // Vérifie le solde
-      if ((userData.coins || 0) < bidAmount) {
+      if ((userData.coins || 0) < cost) {
         throw new Error("Pas assez de pièces pour miser !");
       }
 
-      // Si il y a déjà un highestBidder, rembourse-le
-      if (auctionData.highestBidderId && auctionData.highestBidderId !== user.uid) {
+      // Si il y a déjà un autre highestBidder, rembourse-le
+      if (auctionData.highestBidderId && !alreadyHighest) {
         const lastBidderRef = doc(db, "users", auctionData.highestBidderId);
         transaction.update(lastBidderRef, { coins: increment(auctionData.currentPrice) });
       }
 
       // Déduit les pièces de l'utilisateur
-      transaction.update(userRef, { coins: increment(-bidAmount) });
+      transaction.update(userRef, { coins: increment(-cost) });
 
       // Met à jour le document d’enchère
       transaction.update(auctionRef, {
@@ -350,6 +424,7 @@ async function handlePlaceBid(auction) {
     });
 
     showToast("success", "Enchère placée !");
+    updateQuestProgress('place_bid');
     closeBidModal();
     fetchAndDisplayAuctions();
   } catch (error) {
@@ -385,6 +460,7 @@ export async function sellCardToConsole(cardId, quantity = 1, pricePerCard = 1, 
 
     // Mets à jour les stats (une seule fois après la transaction)
     await updateUserStats(user.uid, { cardsSoldConsole: quantity });
+    await updateQuestProgress('sell_console', quantity);
 
     // ==== AJOUT POUR LES QUÊTES ====
     // Récupère la rareté de la carte vendue
@@ -394,12 +470,13 @@ export async function sellCardToConsole(cardId, quantity = 1, pricePerCard = 1, 
       rarity = card?.rarity || null;
     }
     const usedRarity = normalizeRarity(rarity);
-if (usedRarity === "Épique") {
-  await updateQuestProgress('sell_epic_console');
-}
-if (usedRarity === "Légendaire") {
-  await updateQuestProgress('sell_legendary_console');
-}
+    // On compte chaque carte vendue (vendre 2 épiques d'un coup = 2 pour la quête)
+    if (usedRarity === "Épique") {
+      await updateQuestProgress('sell_epic_console', quantity);
+    }
+    if (usedRarity === "Légendaire") {
+      await updateQuestProgress('sell_legendary_console', quantity);
+    }
 
     // ==============================
 

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Boutique - JWBnDr</title>
+    <link rel="stylesheet" href="main.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0a1224">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="JWBnDr">
+    <link rel="apple-touch-icon" href="assets/logo/logo.png">
+    <link rel="icon" href="assets/logo/logo.png">
+</head>
+<body>
+    <header class="main-header"></header>
+
+    <main class="shop-page">
+        <h2 class="page-title">Boutique</h2>
+        <p class="page-subtitle">Nouvelle boutique dans <strong id="shop-countdown">--</strong></p>
+
+        <!-- Cadeau du jour -->
+        <section id="daily-gift" class="gift-banner">
+            <div class="gift-icon" aria-hidden="true">🎁</div>
+            <div class="gift-text">
+                <strong>Cadeau du jour</strong>
+                <span id="gift-subtitle">Des pièces gratuites chaque jour</span>
+            </div>
+            <button id="gift-button" class="gift-button">Récupérer</button>
+        </section>
+
+        <!-- Cartes du jour -->
+        <section class="shop-section">
+            <div class="section-head">
+                <h3>Cartes du jour</h3>
+                <button id="odds-toggle" class="link-button" aria-expanded="false">Chances ⓘ</button>
+            </div>
+            <div id="odds-panel" class="odds-panel" hidden></div>
+            <div id="shop-cards" class="shop-cards"></div>
+        </section>
+
+        <!-- Boosters -->
+        <section class="shop-section">
+            <div class="section-head">
+                <h3>Boosters</h3>
+                <span class="section-hint">Limite par jour</span>
+            </div>
+            <div id="shop-boosters" class="shop-boosters"></div>
+        </section>
+    </main>
+
+    <div id="toast-container"></div>
+    <div id="custom-modal" style="display:none;">
+      <div class="modal-content">
+        <span class="close-btn" id="custom-modal-close">&times;</span>
+        <div id="custom-modal-title"></div>
+        <div id="custom-modal-message"></div>
+        <div id="custom-modal-actions"></div>
+      </div>
+    </div>
+
+    <script type="module" src="header.js"></script>
+    <script type="module" src="boutique.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js');
+            });
+        }
+    </script>
+</body>
+</html>

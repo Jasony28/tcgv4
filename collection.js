@@ -4,7 +4,8 @@ import { doc, runTransaction, Timestamp, collection, increment } from "https://w
 import { db } from './firebase-config.js';
 import { protectPage } from './auth-manager.js';
 import { showToast, showConfirmDialog } from './toast.js';
-import { sellCardToConsole } from './marche.js'; // Assurez-vous que marche.js exporte bien cette fonction
+import { sellCardToConsole } from './marche.js';
+import { updateQuestProgress } from './quest-manager.js'; // Assurez-vous que marche.js exporte bien cette fonction
 
 // --- Éléments du DOM ---
 const collectionGrid = document.getElementById('collection-grid');
@@ -31,9 +32,48 @@ let localUserData;
 
 // --- Fonctions d'affichage et de gestion de l'UI ---
 
+let activeFilter = 'all';
+
+// Filtre affiché (rareté, possédées, manquantes) sans recharger la collection
+function applyFilter() {
+    collectionGrid.querySelectorAll('.card').forEach(el => {
+        const show = activeFilter === 'all'
+            || (activeFilter === 'owned' && el.dataset.owned === '1')
+            || (activeFilter === 'missing' && el.dataset.owned === '0')
+            || el.dataset.rarity === activeFilter;
+        el.style.display = show ? '' : 'none';
+    });
+}
+
+function setupFilters() {
+    const chips = document.querySelectorAll('#collection-filters .chip');
+    chips.forEach(chip => chip.addEventListener('click', () => {
+        chips.forEach(c => c.classList.toggle('active', c === chip));
+        activeFilter = chip.dataset.filter;
+        applyFilter();
+    }));
+}
+
 function displayCollection(userCollection, cardsSet) {
     if (!collectionGrid) return;
     collectionGrid.innerHTML = '';
+
+    // Progression de l'album
+    const ownedCount = cardsSet.filter(card => userCollection?.[card.id]?.quantity > 0).length;
+    const pct = cardsSet.length ? Math.round((ownedCount / cardsSet.length) * 100) : 0;
+    document.getElementById('collection-count').textContent = `${ownedCount} / ${cardsSet.length}`;
+    document.getElementById('collection-pct').textContent = `${pct}%`;
+    document.getElementById('collection-fill').style.width = `${pct}%`;
+
+    // Progression par rareté (chaque rareté complète = un succès dans le profil)
+    const rarityIcons = [['Commune', '⚪'], ['Rare', '🔷'], ['epique', '💜'], ['Légendaire', '👑']];
+    document.getElementById('album-achievements').innerHTML = rarityIcons.map(([rarity, icon]) => {
+        const ofRarity = cardsSet.filter(c => c.rarity === rarity);
+        if (!ofRarity.length) return '';
+        const have = ofRarity.filter(c => userCollection?.[c.id]?.quantity > 0).length;
+        const done = have === ofRarity.length;
+        return `<span class="rarity-progress ${done ? 'done' : ''}">${icon} ${have}/${ofRarity.length}${done ? ' 🏅' : ''}</span>`;
+    }).join('');
 
     cardsSet.forEach(card => {
         const cardData = userCollection ? (userCollection[card.id] || null) : null;
@@ -41,6 +81,8 @@ function displayCollection(userCollection, cardsSet) {
         const cardDiv = document.createElement('div');
         // Correction pour la classe CSS : remplace les accents pour être compatible
         cardDiv.className = `card rarity-${card.rarity.replace(/é/g, 'e').replace(/É/g, 'E')}`;
+        cardDiv.dataset.rarity = card.rarity;
+        cardDiv.dataset.owned = owned ? '1' : '0';
 
         if (owned) {
             const cardImage = document.createElement('img');
@@ -62,6 +104,7 @@ function displayCollection(userCollection, cardsSet) {
         
         collectionGrid.appendChild(cardDiv);
     });
+    applyFilter();
 }
 
 function openCardOverlay(card, cardData) {
@@ -145,7 +188,14 @@ async function handleConsoleSell(card, cardData) {
 
     if (!ok) return;
 
-    await sellCardToConsole(card.id, quantityToSell, pricePerCard);
+    // Bouton désactivé pendant la vente pour éviter une double vente au double clic
+    confirmSellButton.disabled = true;
+    try {
+        // On passe la rareté : sinon les cartes V2 ne comptaient pas pour les quêtes de vente
+        await sellCardToConsole(card.id, quantityToSell, pricePerCard, card.rarity);
+    } finally {
+        confirmSellButton.disabled = false;
+    }
     closeOverlay();
     // Recharger la collection pour voir les changements
     initializeCollection(); 
@@ -175,7 +225,7 @@ async function createAuction(card, cardData) {
             const userDoc = await transaction.get(userDocRef);
             if (!userDoc.exists()) throw new Error("Document utilisateur non trouvé.");
             
-            const currentCollection = userDoc.data().collection;
+            const currentCollection = userDoc.data().collection || {};
             if (!currentCollection[card.id] || currentCollection[card.id].quantity <= quantityToSell) {
                 throw new Error("Vous ne possédez pas assez de doubles de cette carte.");
             }
@@ -200,7 +250,8 @@ async function createAuction(card, cardData) {
             transaction.set(doc(auctionsColRef), auctionData);
         });
 
-        showToast("Votre carte a été mise aux enchères avec succès !", "success");
+        showToast("success", "Votre carte a été mise aux enchères avec succès !");
+        updateQuestProgress('create_auction');
         closeOverlay();
         initializeCollection();
         
@@ -252,6 +303,6 @@ if (collectionGrid) {
         if (e.target === overlay) closeOverlay();
     });
 
-    // C'est cet appel qui causait l'erreur car la fonction ci-dessus manquait.
+    setupFilters();
     initializeCollection();
 }

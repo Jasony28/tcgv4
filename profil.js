@@ -4,10 +4,13 @@ import {
   query, where, getDocs, onSnapshot
 } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { protectPage } from './auth-manager.js';
-import { allCards } from './cards.js';
+import { allCards as allCardsV1 } from './cards.js';
+import { allCardsV2 } from './cards1.js';
 import { db } from './firebase-config.js';
 import { showToast } from './toast.js';
 import { updateQuestProgress } from './quest-manager.js';
+import { getAchievementsStatus, rewardText, countClaimedAchievements } from './achievements-config.js';
+import { claimAchievement } from './achievements.js';
 
 // ----------- VARIABLES GLOBALES -----------
 
@@ -18,8 +21,17 @@ let tradeUnsubscribe = null;
 let localOffer = {};   // { cardId: qty }
 let localCoins = 0;
 let ready = false;
+const tradeNotifIntervals = {}; // tradeReqId -> interval du compte à rebours
+
+// Les deux collections (V1 + V2) pour retrouver nom/image de n'importe quelle carte
+const allCards = [...allCardsV1, ...allCardsV2];
 
 // ----------- UTILS -----------
+
+// Les pseudos sont choisis par les joueurs : on les échappe avant de les insérer en HTML
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
 
 function getCardNameById(cardId) {
   const card = allCards.find(c => c.id === cardId);
@@ -97,10 +109,67 @@ async function initializeProfilPage() {
     setTimeout(() => location.reload(), 1000);
   };
 
+  renderAchievements(userData);
+
   // Amis & échanges
   setupFriendsFeature(userData);
   listenForTradeRequests();
   listenForTradeResponses();
+}
+
+// ----------- SUCCÈS -----------
+
+function renderAchievements(userData) {
+  const list = document.getElementById('achievements-list');
+  if (!list) return;
+  const status = getAchievementsStatus(userData);
+
+  // Prêts à réclamer d'abord, puis obtenus, puis en cours (les plus avancés en premier)
+  const rank = a => (a.unlocked && !a.claimed) ? 0 : (a.claimed ? 1 : 2);
+  status.sort((a, b) => rank(a) - rank(b) || (b.owned / b.total) - (a.owned / a.total));
+
+  document.getElementById('achievements-count').textContent = `${status.filter(a => a.claimed).length} / ${status.length}`;
+  document.getElementById('profile-badges').innerHTML = status.filter(a => a.claimed)
+    .map(a => `<span class="badge-medal tier-${a.tier}" title="${a.title}">${a.icon}</span>`).join('');
+
+  list.innerHTML = '';
+  for (const a of status) {
+    const state = a.claimed ? 'claimed' : (a.unlocked ? 'ready' : 'locked');
+    const pct = Math.round((a.owned / a.total) * 100);
+    const item = document.createElement('div');
+    item.className = `achievement ${state}`;
+    item.innerHTML = `
+      <span class="badge-medal tier-${a.tier}">${a.icon}</span>
+      <div class="achievement-info">
+        <strong>${a.title}</strong>
+        <span class="achievement-desc">${a.description}</span>
+        ${a.claimed ? '' : `<div class="quest-bar"><div class="quest-bar-fill" style="width:${pct}%"></div></div>`}
+        <span class="achievement-reward">🎁 ${rewardText(a.reward)}</span>
+      </div>
+      <div class="achievement-action">
+        ${state === 'ready' ? '<button class="claim-button">Réclamer</button>'
+          : state === 'claimed' ? '<span class="achievement-done">Obtenu ✓</span>'
+          : `<span class="achievement-progress">${a.owned}/${a.total}</span>`}
+      </div>
+    `;
+    if (state === 'ready') {
+      const btn = item.querySelector('.claim-button');
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        try {
+          const claimed = await claimAchievement(globalUserData.uid, a.id);
+          showToast('success', `🏅 ${claimed.title} ! ${rewardText(claimed.reward)}`, 4500);
+        } catch (e) {
+          showToast('error', e.message || "Impossible de réclamer ce succès.");
+        }
+        const snap = await getDoc(doc(db, "users", globalUserData.uid));
+        globalUserData = { ...globalUserData, ...snap.data() };
+        document.getElementById('profile-coins').textContent = globalUserData.coins || 0;
+        renderAchievements(globalUserData);
+      });
+    }
+    list.appendChild(item);
+  }
 }
 
 // ----------- AMIS & LISTES -----------
@@ -152,7 +221,7 @@ window.refreshFriendsList = async function() {
   section.style.display = 'block';
   const friends = userData.friends || [];
   if (friends.length === 0) {
-    section.innerHTML = "<p style='text-align:center;color:#888'>Tu n’as pas encore d’amis.</p>";
+    section.innerHTML = "<p class='empty-msg'>Tu n’as pas encore d’amis.</p>";
     return;
   }
   for (let friendUid of friends) {
@@ -167,16 +236,19 @@ window.refreshFriendsList = async function() {
       const friendDiv = document.createElement('div');
       friendDiv.className = 'friend-block';
       friendDiv.innerHTML = `
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:3px;">
-          <strong>${friend.pseudo}</strong>
-          <span style="color:${isOnline ? 'green' : '#999'};font-size:0.9em;">
+        <div class="friend-head">
+          <strong>${escapeHtml(friend.pseudo)}</strong>
+          <span class="friend-badges" title="Succès obtenus">🏅 ${countClaimedAchievements(friend)}</span>
+          <span class="friend-status ${isOnline ? 'online' : ''}">
             ${isOnline ? "En ligne" : ("Dernière connexion : " + (lastOnline ? new Date(lastOnline).toLocaleString() : 'inconnue'))}
           </span>
         </div>
-        <button class="profile-btn" style="margin-bottom:10px;margin-top:4px;background:#7b9acc;font-size:1em"
-          onclick="window.showFriendCollection && window.showFriendCollection('${friendUid}')">Voir la collection</button>
-        <button class="profile-btn" style="margin-bottom:10px;margin-top:4px;background:#00b894;font-size:1em"
-          onclick="window.startTradeWithFriend && window.startTradeWithFriend('${friendUid}')">Échanger</button>
+        <div class="friend-actions">
+          <button class="profile-btn blue"
+            onclick="window.showFriendCollection && window.showFriendCollection('${friendUid}')">Collection</button>
+          <button class="profile-btn success"
+            onclick="window.startTradeWithFriend && window.startTradeWithFriend('${friendUid}')">Échanger</button>
+        </div>
       `;
       section.appendChild(friendDiv);
     } catch {}
@@ -193,7 +265,7 @@ window.refreshFriendRequestsList = async function() {
   globalUserData.friendRequests = userData.friendRequests || [];
   const requests = userData.friendRequests || [];
   if (requests.length === 0) {
-    section.innerHTML = "<p style='color:#888;text-align:center;'>Aucune demande en attente.</p>";
+    section.innerHTML = "<p class='empty-msg'>Aucune demande en attente.</p>";
     return;
   }
   for (const requestUid of requests) {
@@ -203,9 +275,9 @@ window.refreshFriendRequestsList = async function() {
     const block = document.createElement('div');
     block.className = 'friend-request-block';
     block.innerHTML = `
-      <strong>${reqUser.pseudo}</strong>
-      <button class="profile-btn" style="margin-left:10px;background:#7b9acc" onclick="window.acceptFriendRequest && window.acceptFriendRequest('${requestUid}')">Accepter</button>
-      <button class="profile-btn" style="margin-left:10px;background:#e67e22" onclick="window.refuseFriendRequest && window.refuseFriendRequest('${requestUid}')">Refuser</button>
+      <strong>${escapeHtml(reqUser.pseudo)}</strong>
+      <button class="profile-btn success" onclick="window.acceptFriendRequest && window.acceptFriendRequest('${requestUid}')">Accepter</button>
+      <button class="profile-btn warn" onclick="window.refuseFriendRequest && window.refuseFriendRequest('${requestUid}')">Refuser</button>
     `;
     section.appendChild(block);
   }
@@ -237,24 +309,24 @@ window.showFriendCollection = async function(friendUid) {
   const friendSnap = await getDoc(friendRef);
   if (!friendSnap.exists()) return showToast('error', "Utilisateur introuvable !");
   const friend = friendSnap.data();
-  let html = `<h4 style="margin-top:0">${friend.pseudo} – Collections</h4>`;
+  let html = `<h4 class="friend-collection-title">${escapeHtml(friend.pseudo)} – Collection</h4>`;
   try {
     let v1Html = '';
     for (let card of allCards) {
       const quantity = friend.collection?.[card.id]?.quantity || 0;
       if (quantity > 0) {
         v1Html += `
-          <div style="display:inline-block;margin:3px 7px 7px 0;padding:6px 10px 2px 10px;border-radius:8px;background:#f7f7fa;text-align:center;">
-            <img src="${card.image}" alt="${card.name}" style="height:48px;vertical-align:middle;border-radius:6px;box-shadow:0 2px 10px #0001;"><br>
-            ${card.name} <span style="color:#5376a1">x${quantity}</span>
+          <div class="friend-card-item">
+            <img src="${card.image}" alt="${card.name}">
+            ${card.name} <span>x${quantity}</span>
           </div>`;
       }
     }
-    html += `<div style="margin-bottom:10px;"><strong>Collection :</strong>${v1Html ? "<br>"+v1Html : " <span style='color:#aaa'>Aucune carte</span>"}</div>`;
+    html += v1Html ? `<div class="friend-card-list">${v1Html}</div>` : `<p class="empty-msg">Aucune carte</p>`;
   } catch {}
-  if (html.endsWith('</h4>')) html += `<div style="color:#aaa;margin-top:6px;">Aucune carte possédée</div>`;
+  if (html.endsWith('</h4>')) html += `<p class="empty-msg">Aucune carte possédée</p>`;
   const section = document.getElementById('friends-section');
-  section.innerHTML = html + '<div style="margin-top:18px"><button class="profile-btn" onclick="document.getElementById(\'friends-section\').style.display=\'none\'">Fermer</button></div>';
+  section.innerHTML = '<div class="friend-block">' + html + '<div style="margin-top:14px"><button class="profile-btn" onclick="document.getElementById(\'friends-section\').style.display=\'none\'">Fermer</button></div></div>';
 };
 
 // ----------- ECHANGE (DEMANDE/NOTIF) -----------
@@ -336,21 +408,16 @@ window.showIncomingTradeNotif = function(tradeReqId, data) {
   if (document.getElementById('trade-notif-'+tradeReqId)) return;
   const notif = document.createElement('div');
   notif.id = 'trade-notif-'+tradeReqId;
-  notif.style = `
-    position:fixed;top:20px;left:50%;transform:translateX(-50%);
-    background:#fff;border-radius:15px;box-shadow:0 6px 32px #0002;padding:24px 32px;z-index:3000;
-    display:flex;flex-direction:column;align-items:center;gap:16px;min-width:260px;
-    font-size:1.2em;
-  `;
+  notif.className = 'trade-notif';
   notif.innerHTML = `
-    <div style="margin-bottom:8px;">
-      <strong class="trade-from-pseudo">${data.from}</strong> souhaite échanger avec toi !
-    </div>
     <div>
-      <button class="profile-btn" style="margin-right:14px;background:#00b894" onclick="window.acceptTradeNotif('${tradeReqId}')">Accepter</button>
-      <button class="profile-btn" style="background:#e67e22" onclick="window.refuseTradeNotif('${tradeReqId}')">Refuser</button>
+      <strong class="trade-from-pseudo">…</strong> souhaite échanger avec toi !
     </div>
-    <div id="trade-timer-${tradeReqId}" style="font-size:0.9em;color:#888;margin-top:4px;"></div>
+    <div class="friend-actions">
+      <button class="profile-btn success" onclick="window.acceptTradeNotif('${tradeReqId}')">Accepter</button>
+      <button class="profile-btn warn" onclick="window.refuseTradeNotif('${tradeReqId}')">Refuser</button>
+    </div>
+    <div id="trade-timer-${tradeReqId}" class="trade-notif-timer"></div>
   `;
   document.body.appendChild(notif);
   (async () => {
@@ -368,17 +435,25 @@ window.showIncomingTradeNotif = function(tradeReqId, data) {
     timer -= 1;
     if (timerEl) timerEl.textContent = `Temps restant : ${timer}s`;
     if (timer <= 0) {
-      clearInterval(interval);
-      notif.remove();
+      clearTradeNotif(tradeReqId);
       await updateDoc(doc(db, "tradeRequests", tradeReqId), { status: "expired" });
     }
   }, 1000);
+  tradeNotifIntervals[tradeReqId] = interval;
 };
+
+// Retire la notif ET stoppe son compte à rebours. Avant, le minuteur continuait après
+// "Accepter" et passait l'échange en cours à "expired" au bout de 60s.
+function clearTradeNotif(tradeReqId) {
+  clearInterval(tradeNotifIntervals[tradeReqId]);
+  delete tradeNotifIntervals[tradeReqId];
+  document.getElementById('trade-notif-'+tradeReqId)?.remove();
+}
 
 window.acceptTradeNotif = async function(tradeReqId) {
   try {
+    clearTradeNotif(tradeReqId);
     await updateDoc(doc(db, "tradeRequests", tradeReqId), { status: "accepted" });
-    document.getElementById('trade-notif-'+tradeReqId).remove();
     showToast('success', "Tu as accepté la demande d'échange !");
     const tradeSnap = await getDoc(doc(db, "tradeRequests", tradeReqId));
     if (tradeSnap.exists()) {
@@ -389,8 +464,8 @@ window.acceptTradeNotif = async function(tradeReqId) {
   }
 };
 window.refuseTradeNotif = async function(tradeReqId) {
+  clearTradeNotif(tradeReqId);
   await updateDoc(doc(db, "tradeRequests", tradeReqId), { status: "refused" });
-  document.getElementById('trade-notif-'+tradeReqId).remove();
   showToast('info', "Tu as refusé la demande d'échange.");
 };
 
@@ -468,10 +543,12 @@ function updateTradeFirestore() {
   if (!currentTradeId) return;
   const isA = (currentTradeData.from === globalUserData.uid);
   const offerField = isA ? "offerA" : "offerB";
-  const readyField = isA ? "readyA" : "readyB";
+  // L'offre change : les DEUX joueurs doivent revalider. Avant, l'autre restait "prêt"
+  // et pouvait valider une offre modifiée sans l'avoir vue.
   updateDoc(doc(db, "tradeRequests", currentTradeId), {
     [offerField]: { cards: {...localOffer}, coins: localCoins },
-    [readyField]: false
+    readyA: false,
+    readyB: false
   });
   ready = false;
   document.getElementById('trade-status-msg').textContent = '';
@@ -517,11 +594,9 @@ async function updateTradeModalUI(tradeData) {
 
   document.getElementById('trade-other-coins').textContent = otherOffer.coins || 0;
 
-   if (tradeData.status === "completed") {
-      showToast('success', "Échange réalisé !");
-      await updateQuestProgress('friend_trade');
-      closeTradeModal();
-      return;
+  if (tradeData.status === "completed") {
+    await onTradeCompleted();
+    return;
   }
   if (["canceled", "refused", "expired"].includes(tradeData.status)) {
     showToast('info', "Échange annulé/refusé.");
@@ -529,7 +604,7 @@ async function updateTradeModalUI(tradeData) {
     return;
   }
   if (tradeData.readyA && tradeData.readyB) {
-    document.getElementById('trade-status-msg').innerHTML = `<button id="trade-final-confirm-btn" class="profile-btn" style="background:#2196f3;">Valider l'échange</button>`;
+    document.getElementById('trade-status-msg').innerHTML = `<button id="trade-final-confirm-btn" class="profile-btn blue">Valider l'échange</button>`;
     document.getElementById('trade-final-confirm-btn').onclick = handleFinalValidation;
   } else {
     document.getElementById('trade-status-msg').textContent = '';
@@ -555,30 +630,34 @@ async function handleFinalValidation() {
     }
     if ((dataA.coins || 0) < (trade.offerA.coins || 0)) throw "A n’a plus assez de pièces.";
     if ((dataB.coins || 0) < (trade.offerB.coins || 0)) throw "B n’a plus assez de pièces.";
+    // Variation nette par carte : si la même carte est dans les deux offres, la 2e écriture
+    // écrasait la 1re (l'un des joueurs gagnait des cartes sans rien perdre).
+    const delta = {};
+    for (const [id, qty] of Object.entries(trade.offerA.cards || {})) delta[id] = (delta[id] || 0) - qty;
+    for (const [id, qty] of Object.entries(trade.offerB.cards || {})) delta[id] = (delta[id] || 0) + qty;
     let updatesA = {}, updatesB = {};
-    for (const [id, qty] of Object.entries(trade.offerA.cards || {})) {
-      updatesA[`collection.${id}.quantity`] = increment(-qty);
-    }
-    for (const [id, qty] of Object.entries(trade.offerB.cards || {})) {
-      updatesA[`collection.${id}.quantity`] = increment(qty);
+    for (const [id, d] of Object.entries(delta)) {
+      if (d === 0) continue;
+      updatesA[`collection.${id}.quantity`] = increment(d);
+      updatesB[`collection.${id}.quantity`] = increment(-d);
     }
     updatesA['coins'] = increment((trade.offerB.coins || 0) - (trade.offerA.coins || 0));
-    for (const [id, qty] of Object.entries(trade.offerB.cards || {})) {
-      updatesB[`collection.${id}.quantity`] = increment(-qty);
-    }
-    for (const [id, qty] of Object.entries(trade.offerA.cards || {})) {
-      updatesB[`collection.${id}.quantity`] = increment(qty);
-    }
     updatesB['coins'] = increment((trade.offerA.coins || 0) - (trade.offerB.coins || 0));
     transaction.update(userARef, updatesA);
     transaction.update(userBRef, updatesB);
     transaction.update(docRef, { status: "completed" });
-  }).then(() => {
-    showToast('success', "Échange effectué !");
-    closeTradeModal();
-  }).catch(e => {
+  }).then(() => onTradeCompleted()).catch(e => {
     showToast("error", "Erreur : " + (e?.message || e));
   });
+}
+// Appelé une seule fois par joueur (par le validateur après la transaction, ou via l'écouteur
+// pour l'autre joueur). Avant, le validateur fermait la modale avant de recevoir "completed"
+// et ne gagnait jamais la quête d'échange.
+async function onTradeCompleted() {
+  if (!currentTradeId) return;
+  closeTradeModal();
+  showToast('success', "Échange effectué !");
+  await updateQuestProgress('friend_trade');
 }
 function handleCancelTrade() {
   if (!currentTradeId) return;
@@ -602,7 +681,7 @@ function renderOtherOffer(cardsObj) {
   const container = document.getElementById('trade-other-cards');
   container.innerHTML = '';
   if (!cardsObj || Object.keys(cardsObj).length === 0) {
-    container.innerHTML = "<span style='color:#aaa;'>Aucune carte proposée</span>";
+    container.innerHTML = "<span class='empty-msg'>Aucune carte proposée</span>";
     return;
   }
   for (const [cardId, qty] of Object.entries(cardsObj)) {
@@ -613,10 +692,9 @@ function renderOtherOffer(cardsObj) {
       div.innerHTML = `
         <img src="${card?.image || ''}" alt="${card?.name || cardId}" />
         x${qty}
-        <span style="font-size:.99em;color:#777">${card?.name || cardId}</span>
+        <span class="friend-status">${card?.name || cardId}</span>
       `;
       container.appendChild(div);
     }
   }
 }
-await updateQuestProgress('friend_trade');

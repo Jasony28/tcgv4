@@ -2,43 +2,66 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Passe de la Semaine - JWBnDr</title>
     <link rel="stylesheet" href="main.css">
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#7b9acc">
+    <meta name="theme-color" content="#0a1224">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="JWBnDr">
+    <link rel="apple-touch-icon" href="assets/logo/logo.png">
+    <link rel="icon" href="assets/logo/logo.png">
 </head>
 <body>
     <header class="main-header"></header>
 
     <main class="season-pass-page">
+        <!-- Niveau + XP -->
+        <section class="pass-hero">
+            <div class="pass-level-badge">
+                <span>Niv.</span>
+                <strong id="pass-level">0</strong>
+            </div>
+            <div class="pass-hero-info">
+                <h2 class="season-title">Passe de la semaine</h2>
+                <div class="xp-bar"><div class="xp-bar-fill" id="pass-xp-fill"></div></div>
+                <span class="xp-text" id="pass-xp-text">--</span>
+                <span class="season-timer">Fin de saison dans <strong id="season-timer">--</strong></span>
+            </div>
+        </section>
+
         <div class="pass-track-container">
-            <h2 class="season-title">PASSE DE LA SEMAINE</h2>
+            <div class="section-head">
+                <h3>Récompenses</h3>
+                <button id="claim-all-button" class="claim-all-button" hidden>Tout réclamer</button>
+            </div>
             <div class="pass-track-scroll">
-                <div class="pass-track">
-                    </div>
+                <div class="pass-track"></div>
             </div>
         </div>
 
         <div class="weekly-quests-container">
-            <h2 class="season-title">QUÊTES DE LA SEMAINE</h2>
-            <ul class="quests-list">
-                </ul>
+            <div class="section-head">
+                <h3>Quêtes du jour</h3>
+                <span class="section-hint">Nouvelles dans <strong id="daily-timer">--</strong></span>
+            </div>
+            <ul class="quests-list" id="daily-quests"></ul>
+        </div>
+
+        <div class="weekly-quests-container">
+            <div class="section-head">
+                <h3>Quêtes de la semaine</h3>
+            </div>
+            <ul class="quests-list" id="weekly-quests"></ul>
         </div>
     </main>
 
+    <div id="toast-container"></div>
+
+    <script type="module" src="header.js"></script>
     <script type="module" src="battlepass.js"></script>
-    <script type="module" src="toast.js"></script>
-    <script>
-        /* On désactive temporairement le Service Worker pour tester la connexion Google
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./service-worker.js');
-        });
-    }
-    */
-    </script>
-     <script type="module" src="header.js"></script> <script type="module" src="toast.js"></script>
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
@@ -46,6 +69,5 @@
             });
         }
     </script>
-    <script type="module" src="header.js"></script>
 </body>
 </html>
