@@ -69,8 +69,7 @@ onSchedule('every 5 minutes', async (event) => {
           `${auction.highestBidderPseudo}`);
         transaction.update(buyerRef, {[itemPath]: inc(item.quantity)});
         if (sellerSnap.exists) {
-          transaction.update(sellerRef,
-              {coins: inc(auction.currentPrice)});
+          transaction.update(sellerRef, {coins: inc(auction.currentPrice)});
         }
       } else {
         // --- CAS 2: PERSONNE (ou échange non conclu) ---
