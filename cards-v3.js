@@ -16,6 +16,11 @@ const DISTRIBUTION = [
     { rarity: 'Légendaire', prefix: 'L', label: 'Légendaire', count: 6 }
 ];
 
+// Cartes terminées : remplacent la carte provisoire du même id
+const FINISHED = {
+    V3_L01: { name: 'Fenrir', image: 'assets/cards3/Fenrir.png' }
+};
+
 export const allCardsV3 = DISTRIBUTION.flatMap(({ rarity, prefix, label, count }) =>
     Array.from({ length: count }, (_, i) => {
         const n = String(i + 1).padStart(2, '0');
@@ -24,7 +29,8 @@ export const allCardsV3 = DISTRIBUTION.flatMap(({ rarity, prefix, label, count }
             name: `${label} V3 n°${n}`,            // ← à remplacer par le vrai nom
             rarity,
             image: `assets/cards3/V3_${prefix}${n}.svg`, // ← à remplacer par la vraie image
-            version: 'v3'
+            version: 'v3',
+            ...FINISHED[`V3_${prefix}${n}`]
         };
     })
 );

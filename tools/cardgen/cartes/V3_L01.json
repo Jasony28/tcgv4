@@ -1,0 +1,32 @@
+{
+  "art": "images/fenrir.jpg",
+  "name": "Fenrir",
+  "suffix": "ex",
+  "stage": "BASE",
+  "hp": 230,
+  "type": "foudre",
+  "ability": {
+    "name": "Chaînes Brisées",
+    "text": "Quand Fenrir arrive en jeu, il brise ses chaînes : l'adversaire ne peut pas battre en retraite pendant son prochain tour."
+  },
+  "attacks": [
+    {
+      "cost": [
+        "foudre",
+        "foudre",
+        "incolore"
+      ],
+      "name": "Hurlement du Ragnarök",
+      "damage": 200,
+      "text": "Fenrir hurle vers l'orage et abat la foudre runique sur son adversaire. Défausse 2 Énergies de cette carte."
+    }
+  ],
+  "weakness": "combat",
+  "retreat": 2,
+  "city": "Asgard",
+  "set": "V3",
+  "number": "L01/30",
+  "stars": 3,
+  "illustrator": "jason",
+  "rarity": "Légendaire"
+}
