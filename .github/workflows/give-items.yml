@@ -1,6 +1,6 @@
 # Cadeau à TOUS les joueurs, même déconnectés.
 # GitHub → onglet Actions → « Cadeau à tous les joueurs » → Run workflow → remplir → Run workflow.
-# Seuls les propriétaires du dépôt peuvent le lancer. Coche « Mode test » pour vérifier sans rien donner.
+# Réservé au compte GitHub Jasony28 (voir « if » plus bas). Coche « Mode test » pour vérifier sans rien donner.
 name: Cadeau à tous les joueurs
 
 on:
@@ -40,6 +40,8 @@ permissions:
 
 jobs:
   give:
+    # Réservé au propriétaire : même un collaborateur du dépôt ne peut pas lancer le cadeau
+    if: github.actor == 'Jasony28' && github.triggering_actor == 'Jasony28'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
