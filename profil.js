@@ -195,7 +195,12 @@ function setupFriendsFeature() {
         ? `${res.pseudo} t'avait déjà demandé : vous êtes maintenant amis !`
         : `Demande envoyée à ${res.pseudo} !`);
     } catch (e) {
-      showToast('error', e.message);
+      console.error("Ajout d'ami :", e);
+      showToast('error', e.code === 'permission-denied'
+        ? "Firebase a refusé la demande d'ami (règles de sécurité de la base). Préviens l'admin."
+        : e.code === 'unavailable'
+          ? "Pas de connexion à la base : vérifie ton internet et réessaie."
+          : e.message, 6000);
     } finally {
       addFriendBtn.disabled = false;
     }

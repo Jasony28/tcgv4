@@ -16,12 +16,11 @@ export const EMPTY_OFFER = () => ({ cards: {}, coins: 0, boosters: { classic: 0,
  * @returns {Promise<{status:'sent'|'accepted', friendUid:string, pseudo:string}>}
  */
 export async function sendFriendRequest(me, rawPseudo) {
-    const pseudo = (rawPseudo || '').trim();
-    if (!pseudo) throw new Error("Entre un pseudo.");
-    const snap = await getDocs(query(collection(db, "users"), where("pseudo", "==", pseudo)));
-    if (snap.empty) throw new Error("Aucun joueur trouvé avec ce pseudo (attention aux majuscules).");
-    const friendDoc = snap.docs[0];
+    const typed = (rawPseudo || '').trim();
+    if (!typed) throw new Error("Entre un pseudo.");
+    const friendDoc = await findPlayerByPseudo(typed);
     const friendUid = friendDoc.id;
+    const pseudo = friendDoc.data().pseudo || typed;
     if (friendUid === me.uid) throw new Error("Impossible de s'ajouter soi-même !");
 
     const meSnap = await getDoc(doc(db, "users", me.uid));
@@ -37,6 +36,33 @@ export async function sendFriendRequest(me, rawPseudo) {
 
     await updateDoc(doc(db, "users", friendUid), { friendRequests: arrayUnion(me.uid) });
     return { status: 'sent', friendUid, pseudo };
+}
+
+/** « Benjamin » = « benjamin » = « Bénjamin  » : sans majuscules, accents ni espaces en trop */
+export const normalizePseudo = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/\s+/g, ' ').trim();
+
+/**
+ * Trouve un joueur par pseudo : d'abord le pseudo exact, sinon sans tenir compte des majuscules,
+ * accents et espaces. Si rien ne correspond, propose les pseudos proches.
+ */
+async function findPlayerByPseudo(typed) {
+    const exact = await getDocs(query(collection(db, "users"), where("pseudo", "==", typed)));
+    if (!exact.empty) return exact.docs[0];
+
+    const wanted = normalizePseudo(typed);
+    const all = (await getDocs(collection(db, "users"))).docs.filter(d => d.data().pseudo);
+    const matches = all.filter(d => normalizePseudo(d.data().pseudo) === wanted);
+    if (matches.length === 1) return matches[0];
+    if (matches.length > 1) {
+        throw new Error(`Plusieurs joueurs s'appellent comme ça (${matches.map(d => d.data().pseudo).join(', ')}) : écris le pseudo exactement.`);
+    }
+    const close = all.map(d => d.data().pseudo)
+        .filter(p => normalizePseudo(p).includes(wanted) || wanted.includes(normalizePseudo(p)))
+        .slice(0, 3);
+    throw new Error(close.length
+        ? `Aucun joueur « ${typed} ». Tu voulais dire : ${close.join(', ')} ?`
+        : `Aucun joueur trouvé avec le pseudo « ${typed} ». Vérifie l'orthographe (son pseudo est affiché en haut de son écran).`);
 }
 
 export async function acceptFriendRequest(myUid, requesterUid) {
