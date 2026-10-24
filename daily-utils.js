@@ -37,6 +37,20 @@ export function getWeekKey(date = new Date()) {
     return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
 }
 
+/** Jour précédent d'une clé de jour : "2026-10-24" → "2026-10-23" (sert aux séries de jours). */
+export function previousDayKey(dayKey) {
+    const [y, m, d] = dayKey.split('-').map(Number);
+    const prev = new Date(Date.UTC(y, m - 1, d - 1));
+    return `${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, '0')}-${String(prev.getUTCDate()).padStart(2, '0')}`;
+}
+
+/** Samedi ou dimanche (heure de Paris) */
+export function isWeekend(date = new Date()) {
+    const p = parisParts(date);
+    const day = new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay();
+    return day === 0 || day === 6;
+}
+
 /** Millisecondes avant le prochain minuit (heure de Paris). */
 export function msUntilNextDay(date = new Date()) {
     const p = parisParts(date);

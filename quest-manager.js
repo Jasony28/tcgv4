@@ -1,4 +1,4 @@
-import { doc, runTransaction } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+import { doc, runTransaction, increment } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
 import { questsConfig, dailyQuestPool, getDailyQuestIds, getLevel } from './battlepass-config.js';
 import { getAuth } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
@@ -126,11 +126,13 @@ export async function updateQuestProgress(actionType, value = 1, extra = {}) {
 
       bp.xp += completedQuests.reduce((sum, q) => sum + (q.xp || 0), 0);
       levelAfter = getLevel(bp.xp);
-      transaction.update(userRef, { battlePass: bp });
+      // Les quêtes rapportent aussi des pièces
+      const coinsEarned = completedQuests.reduce((sum, q) => sum + (q.coins || 0), 0);
+      transaction.update(userRef, coinsEarned > 0 ? { battlePass: bp, coins: increment(coinsEarned) } : { battlePass: bp });
     });
 
     for (const q of completedQuests) {
-      showToast('success', `Quête terminée : ${q.description} (+${q.xp} XP)`, 4000);
+      showToast('success', `Quête terminée : ${q.description} (+${q.xp} XP${q.coins ? `, +${q.coins} pièces` : ''})`, 4000);
     }
     if (levelAfter > levelBefore) {
       showToast('info', `Niveau ${levelAfter} atteint ! Récupère ta récompense dans le Pass.`, 4500);

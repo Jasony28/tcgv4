@@ -22,6 +22,13 @@ export const BOOSTER_INFO = {
     ...(V3_RELEASED ? { v3: { name: 'Booster V3', minPrice: 15 } } : {}),
     legendary: { name: 'Booster Légendaire', minPrice: 50 }
 };
+// Displays fermées (boîtes de boosters) : objets de collection, surtout quand leur série est terminée
+export const DISPLAY_INFO = {
+    classic: { name: 'Display Classique', minPrice: 100 },
+    v2: { name: 'Display V2', minPrice: 130 },
+    ...(V3_RELEASED ? { v3: { name: 'Display V3', minPrice: 150 } } : {}),
+    legendary: { name: 'Coffret Légendaire', minPrice: 160 }
+};
 export const CARD_MIN_PRICES = { 'Commune': 5, 'Rare': 10, 'epique': 25, 'Légendaire': 100 };
 
 // Taxe de l'Hôtel des Ventes sur les enchères vendues : ces pièces sortent du jeu,
@@ -48,27 +55,31 @@ export function describeItem(item) {
         const info = BOOSTER_INFO[item.boosterType] || { name: 'Booster' };
         return { name: info.name, image: 'assets/booster/booster.png', rarity: null, boosterType: item.boosterType };
     }
+    if (item.type === 'display') {
+        const info = DISPLAY_INFO[item.displayType] || { name: 'Display' };
+        return { name: info.name, image: 'assets/booster/booster.png', rarity: null, boosterType: item.displayType };
+    }
     const card = findCard(item.cardId);
     return { name: card ? cardLabel(card) : item.cardId, image: card?.image || '', rarity: card?.rarity || 'Commune' };
 }
 
 export function minPriceFor(item) {
-    const unit = item.type === 'booster'
-        ? (BOOSTER_INFO[item.boosterType]?.minPrice || 10)
+    const unit = item.type === 'booster' ? (BOOSTER_INFO[item.boosterType]?.minPrice || 10)
+        : item.type === 'display' ? (DISPLAY_INFO[item.displayType]?.minPrice || 100)
         : (CARD_MIN_PRICES[findCard(item.cardId)?.rarity] || 5);
     return unit * (item.quantity || 1);
 }
 
 /** Champ Firestore de l'inventaire correspondant à l'objet. */
 function itemField(item) {
-    return item.type === 'booster'
-        ? `boosterInventory.${item.boosterType}`
-        : `collection.${item.cardId}.quantity`;
+    if (item.type === 'booster') return `boosterInventory.${item.boosterType}`;
+    if (item.type === 'display') return `displayInventory.${item.displayType}`;
+    return `collection.${item.cardId}.quantity`;
 }
 function ownedCount(userData, item) {
-    return item.type === 'booster'
-        ? (userData.boosterInventory?.[item.boosterType] || 0)
-        : (userData.collection?.[item.cardId]?.quantity || 0);
+    if (item.type === 'booster') return userData.boosterInventory?.[item.boosterType] || 0;
+    if (item.type === 'display') return userData.displayInventory?.[item.displayType] || 0;
+    return userData.collection?.[item.cardId]?.quantity || 0;
 }
 
 // Additionne plusieurs mouvements sur un même document en une seule écriture
@@ -89,10 +100,11 @@ export async function createListing(seller, { mode, item, startPrice, wantedCard
     if (!['auction', 'trade'].includes(mode)) throw new Error("Type d'annonce invalide.");
     const quantity = Math.floor(item.quantity || 1);
     if (quantity < 1) throw new Error("Quantité invalide.");
-    const cleanItem = item.type === 'booster'
-        ? { type: 'booster', boosterType: item.boosterType, quantity }
+    const cleanItem = item.type === 'booster' ? { type: 'booster', boosterType: item.boosterType, quantity }
+        : item.type === 'display' ? { type: 'display', displayType: item.displayType, quantity }
         : { type: 'card', cardId: item.cardId, quantity };
     if (cleanItem.type === 'booster' && !BOOSTER_INFO[cleanItem.boosterType]) throw new Error("Booster inconnu.");
+    if (cleanItem.type === 'display' && !DISPLAY_INFO[cleanItem.displayType]) throw new Error("Display inconnue.");
     if (cleanItem.type === 'card' && !findCard(cleanItem.cardId)) throw new Error("Carte inconnue.");
     if (!DURATIONS_HOURS.includes(durationHours)) throw new Error("Durée invalide.");
 
@@ -117,6 +129,7 @@ export async function createListing(seller, { mode, item, startPrice, wantedCard
         const owned = ownedCount(snap.data(), cleanItem);
         if (cleanItem.type === 'card' && owned <= quantity) throw new Error("Garde au moins un exemplaire : tu n'as pas assez de doubles.");
         if (cleanItem.type === 'booster' && owned < quantity) throw new Error("Tu n'as pas assez de boosters.");
+        if (cleanItem.type === 'display' && owned < quantity) throw new Error("Tu n'as pas assez de displays.");
 
         transaction.update(userRef, { [itemField(cleanItem)]: increment(-quantity) });
         transaction.set(listingRef, {

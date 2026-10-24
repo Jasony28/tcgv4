@@ -58,30 +58,32 @@ export const REWARD_ICONS = {
 };
 
 // === QUÊTES DE LA SEMAINE (remises à zéro le lundi) ===
+// xp : fait monter le Pass · coins : pièces gagnées en terminant la quête
+// xp : fait monter le Pass · coins : pièces gagnées en terminant la quête
 export const questsConfig = {
-    q8: { description: "Effectuer 2 échanges avec un ami", target: 2, actionType: 'friend_trade', xp: 250 },
-    q9: { description: "Gagner une enchère sur le marché", target: 1, actionType: 'win_bid', xp: 200 },
-    q10: { description: "Vendre 2 cartes épiques à la console", target: 2, actionType: 'sell_epic_console', xp: 150 },
-    q11: { description: "Vendre 1 carte légendaire à la console", target: 1, actionType: 'sell_legendary_console', xp: 200 },
-    q12: { description: "Ouvrir 1 booster légendaire", target: 1, actionType: 'open_legendary_booster', xp: 150 },
-    q13: { description: "Obtenir 10 cartes différentes en 24h", target: 10, actionType: 'obtain_10_diff_cards_24h', xp: 200 },
-    q14: { description: "Se connecter 5 jours d'affilée", target: 5, actionType: 'daily_login_streak', xp: 300 },
-    q15: { description: "Ouvrir 15 boosters", target: 15, actionType: 'open_booster', xp: 200 },
-    q16: { description: "Acheter 5 articles à la boutique", target: 5, actionType: 'shop_buy', xp: 200 }
+    q8: { description: "Effectuer 2 échanges avec un ami", target: 2, actionType: 'friend_trade', xp: 250, coins: 50 },
+    q9: { description: "Gagner une enchère sur le marché", target: 1, actionType: 'win_bid', xp: 200, coins: 40 },
+    q10: { description: "Vendre 2 cartes épiques à la console", target: 2, actionType: 'sell_epic_console', xp: 150, coins: 30 },
+    q11: { description: "Vendre 1 carte légendaire à la console", target: 1, actionType: 'sell_legendary_console', xp: 200, coins: 40 },
+    q12: { description: "Ouvrir 1 booster légendaire", target: 1, actionType: 'open_legendary_booster', xp: 150, coins: 30 },
+    q13: { description: "Obtenir 10 cartes différentes en 24h", target: 10, actionType: 'obtain_10_diff_cards_24h', xp: 200, coins: 40 },
+    q14: { description: "Se connecter 5 jours d'affilée", target: 5, actionType: 'daily_login_streak', xp: 300, coins: 60 },
+    q15: { description: "Ouvrir 15 boosters", target: 15, actionType: 'open_booster', xp: 200, coins: 40 },
+    q16: { description: "Acheter 5 articles à la boutique", target: 5, actionType: 'shop_buy', xp: 200, coins: 40 }
 };
 
 // === QUÊTES DU JOUR (changent tous les jours à 00h) ===
 // La connexion est toujours proposée, + 2 quêtes tirées au hasard dans la liste.
 export const DAILY_LOGIN_QUEST_ID = 'd_login';
 export const dailyQuestPool = {
-    d_login: { description: "Se connecter aujourd'hui", target: 1, actionType: 'daily_login_streak', xp: 50 },
-    d_open3: { description: "Ouvrir 3 boosters", target: 3, actionType: 'open_booster', xp: 80 },
-    d_open5: { description: "Ouvrir 4 boosters", target: 4, actionType: 'open_booster', xp: 110 },
-    d_v2: { description: "Ouvrir 1 booster V2", target: 1, actionType: 'open_v2_booster', xp: 70 },
-    d_shop: { description: "Acheter 1 article à la boutique", target: 1, actionType: 'shop_buy', xp: 70 },
-    d_sell: { description: "Vendre 2 cartes à la console", target: 2, actionType: 'sell_console', xp: 70 },
-    d_bid: { description: "Placer 1 enchère au marché", target: 1, actionType: 'place_bid', xp: 90 },
-    d_auction: { description: "Mettre 1 carte aux enchères", target: 1, actionType: 'create_auction', xp: 80 }
+    d_login: { description: "Se connecter aujourd'hui", target: 1, actionType: 'daily_login_streak', xp: 50, coins: 5 },
+    d_open3: { description: "Ouvrir 3 boosters", target: 3, actionType: 'open_booster', xp: 80, coins: 10 },
+    d_open5: { description: "Ouvrir 4 boosters", target: 4, actionType: 'open_booster', xp: 110, coins: 15 },
+    d_v2: { description: "Ouvrir 1 booster V2", target: 1, actionType: 'open_v2_booster', xp: 70, coins: 10 },
+    d_shop: { description: "Acheter 1 article à la boutique", target: 1, actionType: 'shop_buy', xp: 70, coins: 10 },
+    d_sell: { description: "Vendre 2 cartes à la console", target: 2, actionType: 'sell_console', xp: 70, coins: 10 },
+    d_bid: { description: "Placer 1 enchère au marché", target: 1, actionType: 'place_bid', xp: 90, coins: 20 },
+    d_auction: { description: "Mettre 1 carte aux enchères", target: 1, actionType: 'create_auction', xp: 80, coins: 15 }
 };
 
 /** Les 3 quêtes du jour (identiques pour tous les joueurs ce jour-là). */

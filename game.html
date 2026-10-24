@@ -19,12 +19,15 @@
     <main class="game-container">
         <h2>Ouvrir un Booster</h2>
         <p class="page-subtitle">Touche un booster pour l'ouvrir</p>
+        <p id="series-banner" class="series-banner" hidden></p>
         <div id="booster-selection-container">
+            <h3 class="booster-section-title">🎁 Gratuits aujourd'hui</h3>
             <div id="daily-booster-area" class="booster-option" style="display: none;">
                 <p id="booster-status">...</p>
                 <div id="booster-pack-wrapper">
                     <img src="assets/booster/booster.png" alt="Booster du Jour" id="booster-pack-image">
                 </div>
+                <button id="keep-v1-button" class="keep-button">📦 Garder pour plus tard</button>
             </div>
             <div id="daily-v2-booster-area" class="booster-option daily-v2" style="display: none;">
                 <p id="booster-v2-status">...</p>
@@ -32,7 +35,12 @@
                     <img src="assets/booster/booster.png" alt="Booster V2 du Jour" id="booster-v2-pack-image">
                     <span class="v2-tag">V2</span>
                 </div>
+                <button id="keep-v2-button" class="keep-button">📦 Garder pour plus tard</button>
             </div>
+
+            <h3 class="booster-section-title">📦 Mon inventaire</h3>
+            <p id="inventory-empty" class="inventory-empty" hidden>Ton inventaire est vide. Garde tes boosters gratuits pour plus tard, ou achète-en à la boutique !</p>
+            <div id="display-inventory" class="display-inventory"></div>
             <div id="classic-booster-area" class="booster-option" style="display: none;">
                 <p>Boosters Classiques</p>
                 <div class="inventory-booster-pack" id="classic-booster-opener">
@@ -69,6 +77,14 @@
         <div id="card-reveal-area" class="card-grid" style="display:none;"></div>
     </main>
     <div id="toast-container"></div>
+    <div id="custom-modal" style="display:none;">
+      <div class="modal-content">
+        <span class="close-btn" id="custom-modal-close">&times;</span>
+        <div id="custom-modal-title"></div>
+        <div id="custom-modal-message"></div>
+        <div id="custom-modal-actions"></div>
+      </div>
+    </div>
     <script type="module" src="header.js"></script>
     <script type="module" src="game.js"></script>
     <script>

@@ -10,6 +10,9 @@
 const MARKET_TAX_RATE = 0.10;
 export const sellerProceeds = (price) => price - Math.ceil(price * MARKET_TAX_RATE);
 
+const DISPLAY_NAMES = {
+    classic: 'Display Classique', v2: 'Display V2', v3: 'Display V3', legendary: 'Coffret Légendaire'
+};
 const BOOSTER_NAMES = {
     classic: 'Booster Classique', v2: 'Booster V2', v3: 'Booster V3', legendary: 'Booster Légendaire'
 };
@@ -20,9 +23,9 @@ export function getListingItem(listing) {
 }
 
 function itemField(item) {
-    return item.type === 'booster'
-        ? `boosterInventory.${item.boosterType}`
-        : `collection.${item.cardId}.quantity`;
+    if (item.type === 'booster') return `boosterInventory.${item.boosterType}`;
+    if (item.type === 'display') return `displayInventory.${item.displayType}`;
+    return `collection.${item.cardId}.quantity`;
 }
 
 // Met à jour "meilleure vente / meilleur achat" seulement si le prix est plus élevé
@@ -61,6 +64,7 @@ export async function closeExpiredListings({ db, FieldValue, Timestamp, log = co
                     const entry = {
                         cardId: item.type === 'card' ? item.cardId : null,
                         ...(item.type === 'booster' ? { name: BOOSTER_NAMES[item.boosterType] || 'Booster' } : {}),
+                        ...(item.type === 'display' ? { name: DISPLAY_NAMES[item.displayType] || 'Display' } : {}),
                         price: listing.currentPrice
                     };
                     t.update(buyerRef, { [itemField(item)]: inc(item.quantity), ...bestUpdate(buyer.data(), 'bestPurchase', entry) });

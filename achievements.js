@@ -2,6 +2,7 @@
 import { doc, runTransaction, increment, Timestamp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
 import { ACHIEVEMENTS } from './achievements-config.js';
+import { convertEndedBoosters } from './series-config.js';
 
 /**
  * Donne la récompense d'un succès. Tout est revérifié dans la transaction
@@ -23,11 +24,10 @@ export async function claimAchievement(uid, achievementId) {
 
         const r = achievement.reward;
         const updates = { [`achievements.${achievementId}`]: { claimed: true, at: Timestamp.now() } };
-        if (r.coins) updates.coins = increment(r.coins);
-        if (r.classic) updates['boosterInventory.classic'] = increment(r.classic);
-        if (r.v2) updates['boosterInventory.v2'] = increment(r.v2);
-        if (r.v3) updates['boosterInventory.v3'] = increment(r.v3);
-        if (r.legendary) updates['boosterInventory.legendary'] = increment(r.legendary);
+        // Boosters d'une série terminée : remplacés par leur valeur en pièces
+        const { boosters, coins } = convertEndedBoosters({ classic: r.classic, v2: r.v2, v3: r.v3, legendary: r.legendary });
+        if ((r.coins || 0) + coins) updates.coins = increment((r.coins || 0) + coins);
+        for (const [type, n] of Object.entries(boosters)) updates[`boosterInventory.${type}`] = increment(n);
         transaction.update(userRef, updates);
     });
     return achievement;

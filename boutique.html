@@ -21,14 +21,33 @@
         <h2 class="page-title">Boutique</h2>
         <p class="page-subtitle">Nouvelle boutique dans <strong id="shop-countdown">--</strong></p>
 
-        <!-- Cadeau du jour -->
-        <section id="daily-gift" class="gift-banner">
-            <div class="gift-icon" aria-hidden="true">🎁</div>
-            <div class="gift-text">
-                <strong>Cadeau du jour</strong>
-                <span id="gift-subtitle">Des pièces gratuites chaque jour</span>
+        <!-- Calendrier de cadeaux (7 jours) -->
+        <section id="daily-gift" class="gift-calendar">
+            <div class="section-head">
+                <h3>🎁 Cadeau du jour</h3>
+                <span class="section-hint" id="gift-streak">Série : jour 1</span>
             </div>
+            <div class="gift-days" id="gift-days"></div>
             <button id="gift-button" class="gift-button">Récupérer</button>
+            <p class="hint">Reviens chaque jour : les cadeaux grossissent. Si tu rates un jour, la série repart au jour 1.</p>
+        </section>
+
+        <!-- Offre du jour -->
+        <section id="daily-deal" class="daily-deal"></section>
+
+        <!-- Packs spéciaux -->
+        <section class="shop-section">
+            <div class="section-head"><h3>Packs spéciaux</h3></div>
+            <div id="shop-packs" class="shop-packs"></div>
+        </section>
+
+        <!-- Displays -->
+        <section class="shop-section">
+            <div class="section-head">
+                <h3>Displays</h3>
+                <span class="section-hint">Moins cher + boosters bonus</span>
+            </div>
+            <div id="shop-displays" class="shop-boosters"></div>
         </section>
 
         <!-- Cartes du jour -->
@@ -41,7 +60,7 @@
             <div id="shop-cards" class="shop-cards"></div>
         </section>
 
-        <!-- Boosters -->
+        <!-- Boosters à l'unité -->
         <section class="shop-section">
             <div class="section-head">
                 <h3>Boosters</h3>

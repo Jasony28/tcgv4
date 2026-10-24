@@ -5,9 +5,12 @@ import { allCardsV2 } from './cards1.js';
 import { allCardsV3, V3_RELEASED } from './cards-v3.js';
 import { updateQuestProgress } from './quest-manager.js';
 import { updateUserStats } from './stats-manager.js';
-import { showToast } from './toast.js';
+import { showToast, showConfirmDialog } from './toast.js';
 import { getDayKey } from './daily-utils.js';
 import { playBoosterOpening } from './booster-animation.js';
+import { SHOP_DISPLAYS } from './shop-config.js';
+import { openDisplay, keepDailyBooster } from './inventory-service.js';
+import { SERIES, seriesOfBooster, seriesStatus, isBoosterProduced, daysUntilEnd } from './series-config.js';
 import { DAILY_BOOSTER_LIMIT, DAILY_V2_BOOSTER_LIMIT, LEGENDARY_CHANCE, drawClassicBoosterCards, drawLegendaryBoosterCards } from './booster-draws.js';
 
 // --- Éléments du DOM ---
@@ -158,6 +161,110 @@ function displayAvailableBoosters() {
     } else {
         v3Area.style.display = 'none';
     }
+
+    // --- Séries : plus de boosters gratuits pour une série terminée ---
+    const v1Active = isBoosterProduced('classic');
+    const v2Active = isBoosterProduced('v2');
+    if (!v1Active) dailyBoosterArea.style.display = 'none';
+    if (!v2Active) document.getElementById('daily-v2-booster-area').style.display = 'none';
+
+    // --- Garder les boosters gratuits pour plus tard ---
+    const keepV1 = document.getElementById('keep-v1-button');
+    keepV1.disabled = boostersOpened >= DAILY_BOOSTER_LIMIT;
+    keepV1.onclick = () => handleKeepDaily('v1');
+    const keepV2 = document.getElementById('keep-v2-button');
+    keepV2.disabled = v2Opened >= DAILY_V2_BOOSTER_LIMIT;
+    keepV2.onclick = () => handleKeepDaily('v2');
+
+    // --- Badges de série sur l'inventaire (série terminée = objet de collection) ---
+    for (const [type, areaId] of [['classic', 'classic-booster-area'], ['legendary', 'legendary-booster-area'], ['v2', 'v2-booster-area'], ['v3', 'v3-booster-area']]) {
+        const area = document.getElementById(areaId);
+        area.querySelector('.series-badge')?.remove();
+        const badge = seriesBadgeHTML(seriesOfBooster(type));
+        if (badge) area.insertAdjacentHTML('beforeend', badge);
+    }
+
+    // --- Displays : boîtes de boosters à ouvrir ---
+    const displays = Object.entries(SHOP_DISPLAYS).filter(([t]) => (userData.displayInventory?.[t] || 0) > 0);
+    const displayBox = document.getElementById('display-inventory');
+    displayBox.innerHTML = displays.map(([t, d]) => `
+        <div class="display-card ${d.boosterType}">
+            <div class="display-visual ${d.boosterType}">
+                <img src="assets/booster/booster.png" alt=""><img src="assets/booster/booster.png" alt=""><img src="assets/booster/booster.png" alt="">
+            </div>
+            <div class="display-card-info">
+                <strong>${d.name} <span class="inventory-count-inline">x${userData.displayInventory[t]}</span></strong>
+                <span>${d.boosters + d.bonus} boosters à l'intérieur</span>
+                ${seriesBadgeHTML(seriesOfBooster(d.boosterType))}
+            </div>
+            <button class="open-display-button" data-display="${t}">Ouvrir</button>
+        </div>`).join('');
+    displayBox.querySelectorAll('[data-display]').forEach(btn => { btn.onclick = () => handleOpenDisplay(btn.dataset.display); });
+
+    // --- Inventaire vide ? ---
+    const boosterTotal = ['classic', 'legendary', 'v2', ...(V3_RELEASED ? ['v3'] : [])]
+        .reduce((sum, t) => sum + (userData.boosterInventory?.[t] || 0), 0);
+    document.getElementById('inventory-empty').hidden = boosterTotal + displays.length > 0;
+
+    // --- Bandeau « fin de série » ---
+    const banner = document.getElementById('series-banner');
+    const ending = Object.keys(SERIES).map(k => ({ k, days: daysUntilEnd(k) })).filter(s => s.days !== null && seriesStatus(s.k) === 'active');
+    banner.hidden = ending.length === 0;
+    banner.innerHTML = ending.map(s => `⏳ <strong>${SERIES[s.k].name}</strong> : ${s.days === 0 ? "dernier jour" : `fin dans ${s.days} jour${s.days > 1 ? 's' : ''}`} ! Après, plus aucun booster ne sera produit : garde-en fermés, ils deviendront rares.`).join('<br>');
+}
+
+/** Petit badge « Fin dans X j » ou « Série terminée » */
+function seriesBadgeHTML(seriesKey) {
+    const status = seriesStatus(seriesKey);
+    if (status === 'ended') return `<span class="series-badge ended">💎 Série terminée · collector</span>`;
+    const days = daysUntilEnd(seriesKey);
+    if (days !== null) return `<span class="series-badge ending">⏳ Fin de série dans ${days} j</span>`;
+    return '';
+}
+
+// Garde un booster gratuit dans l'inventaire au lieu de l'ouvrir
+async function handleKeepDaily(kind) {
+    if (transactionInProgress) return;
+    transactionInProgress = true;
+    try {
+        await keepDailyBooster(userData.uid, kind);
+        showToast('success', `📦 Booster ${kind.toUpperCase()} rangé dans ton inventaire !`);
+        await refreshUserData();
+    } catch (e) {
+        showToast('error', e.message || "Impossible de garder ce booster.");
+    } finally {
+        transactionInProgress = false;
+    }
+}
+
+// Ouvre une display : ses boosters arrivent dans l'inventaire
+async function handleOpenDisplay(type) {
+    if (transactionInProgress) return;
+    const d = SHOP_DISPLAYS[type];
+    const ended = !isBoosterProduced(d.boosterType);
+    const ok = await showConfirmDialog({
+        title: `Ouvrir la ${d.name} ?`,
+        message: `Ses ${d.boosters + d.bonus} boosters iront dans ton inventaire.` + (ended ? " Attention : cette série est terminée, une display fermée vaut plus cher au marché !" : ''),
+        confirmText: 'Ouvrir',
+        cancelText: 'Garder fermée'
+    });
+    if (!ok) return;
+    transactionInProgress = true;
+    try {
+        const res = await openDisplay(userData.uid, type);
+        showToast('success', `🗃️ ${d.name} ouverte : +${res.count} boosters dans ton inventaire !`);
+        await refreshUserData();
+    } catch (e) {
+        showToast('error', e.message || "Impossible d'ouvrir la display.");
+    } finally {
+        transactionInProgress = false;
+    }
+}
+
+async function refreshUserData() {
+    const snap = await getDoc(doc(db, "users", userData.uid));
+    userData = { uid: userData.uid, ...snap.data() };
+    displayAvailableBoosters();
 }
 
 
@@ -268,6 +375,10 @@ async function updateUserAfterBoosterOpen(boosterType, drawnCards) {
                 updates[`collection.${cardId}.quantity`] = increment(n);
             }
 
+            // Boosters gratuits : seulement si leur série est encore en cours
+            if ((boosterType === 'daily' && !isBoosterProduced('classic')) || (boosterType === 'daily_v2' && !isBoosterProduced('v2'))) {
+                throw new Error("Cette série est terminée : plus de booster gratuit.");
+            }
             if (boosterType === 'daily') {
                 // Vérification côté transaction : empêche de dépasser la limite (autre onglet, double clic...)
                 if ((currentData.dailyBoosterOpenedCount || 0) >= DAILY_BOOSTER_LIMIT) throw new Error("Boosters quotidiens épuisés. Revenez demain !");

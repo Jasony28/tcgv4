@@ -11,7 +11,9 @@ import { getDayKey, getWeekKey, msUntilNextDay, msUntilNextWeek, formatDuration 
 import { allCards } from './cards.js';
 import { allCardsV2 } from './cards1.js';
 import { allCardsV3Released } from './cards-v3.js';
+import { isBoosterProduced, isCardProduced, BOOSTER_COIN_VALUE } from './series-config.js';
 
+const BOOSTER_REWARDS = { classic_booster: 'classic', legendary_booster: 'legendary', v2_booster: 'v2' };
 const CARD_POOL = [...allCards, ...allCardsV2, ...allCardsV3Released];
 
 const trackContainer = document.querySelector('.pass-track');
@@ -94,7 +96,7 @@ function questItemHTML(questDef, current, completed) {
     return `
         <div class="quest-main">
             <span class="quest-description">${questDef.description}</span>
-            <span class="quest-xp">+${questDef.xp} XP</span>
+            <span class="quest-xp">+${questDef.xp} XP${questDef.coins ? ` · +${questDef.coins} 🪙` : ""}</span>
         </div>
         <div class="quest-bar"><div class="quest-bar-fill" style="width:${completed ? 100 : pct}%"></div></div>
         <span class="quest-progress">${completed ? 'Terminée ✓' : `${current} / ${questDef.target}`}</span>
@@ -156,7 +158,8 @@ async function claimRewards(rewards) {
     const drawnCards = {};
     for (const r of rewards) {
         if (r.type === 'random_card') {
-            const candidates = CARD_POOL.filter(c => c.rarity === r.rarity);
+            // Seulement des cartes de séries encore en cours
+            const candidates = CARD_POOL.filter(c => c.rarity === r.rarity && isCardProduced(c));
             drawnCards[r.step] = candidates[Math.floor(Math.random() * candidates.length)];
         }
     }
@@ -177,9 +180,12 @@ async function claimRewards(rewards) {
                 if (reward.step > level) throw new Error(`Niveau ${reward.step} pas encore atteint.`);
                 if (pass.claimedRewards?.[reward.step]) throw new Error(`Récompense ${reward.step} déjà réclamée.`);
                 if (reward.type === 'coins') add('coins', reward.value);
-                else if (reward.type === 'classic_booster') add('boosterInventory.classic', reward.value);
-                else if (reward.type === 'legendary_booster') add('boosterInventory.legendary', reward.value);
-                else if (reward.type === 'v2_booster') add('boosterInventory.v2', reward.value);
+                else if (BOOSTER_REWARDS[reward.type]) {
+                    // Booster d'une série terminée : remplacé par sa valeur en pièces
+                    const type = BOOSTER_REWARDS[reward.type];
+                    if (isBoosterProduced(type)) add(`boosterInventory.${type}`, reward.value);
+                    else add('coins', reward.value * BOOSTER_COIN_VALUE[type]);
+                }
                 else if (reward.type === 'random_card') add(`collection.${drawnCards[reward.step].id}.quantity`, 1);
                 updates[`battlePass.claimedRewards.${reward.step}`] = true;
             }

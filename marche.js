@@ -7,10 +7,18 @@ import { showToast, showConfirmDialog } from './toast.js';
 import { updateUserStats } from './stats-manager.js';
 import { updateQuestProgress } from './quest-manager.js';
 import {
-    ALL_CARDS, BOOSTER_INFO, DURATIONS_HOURS, MAX_WANTED_CARDS,
+    ALL_CARDS, BOOSTER_INFO, DISPLAY_INFO, DURATIONS_HOURS, MAX_WANTED_CARDS,
     findCard, cardLabel, getListingItem, getListingType, describeItem, minPriceFor, sellerProceeds, MARKET_TAX_RATE,
     createListing, placeBid, acceptTradeListing, cancelListing, finalizeExpiredListings, sellToConsole
 } from './market-service.js';
+import { seriesOfBooster, seriesOfCard, seriesStatus } from './series-config.js';
+
+/** Badge « Série terminée » : l'objet n'est plus produit, il devient rare */
+function seriesBadge(item) {
+    const series = item.type === 'card' ? seriesOfCard(findCard(item.cardId))
+        : seriesOfBooster(item.type === 'display' ? item.displayType : item.boosterType);
+    return seriesStatus(series) === 'ended' ? '<span class="series-badge ended">💎 Série terminée</span>' : '';
+}
 
 // ---------- Utilitaires ----------
 
@@ -34,6 +42,12 @@ function calculateTimeLeft(endTime) {
 /** Visuel d'un objet (carte ou booster) */
 function itemVisual(item, extraClass = '') {
     const info = describeItem(item);
+    if (item.type === 'display') {
+        return `<div class="booster-visual display-stack ${item.displayType} ${extraClass}">
+            <img src="${info.image}" alt=""><img src="${info.image}" alt=""><img src="${info.image}" alt="${info.name}">
+            <span class="display-tag">DISPLAY</span>
+            ${item.quantity > 1 ? `<span class="card-quantity">x${item.quantity}</span>` : ''}</div>`;
+    }
     if (item.type === 'booster') {
         return `<div class="booster-visual ${item.boosterType} ${extraClass}"><img src="${info.image}" alt="${info.name}">
             ${item.boosterType === 'v2' ? '<span class="v2-tag">V2</span>' : ''}
@@ -208,6 +222,7 @@ function renderGrid() {
             : `<span class="listing-wanted">Contre ${(listing.wantedCardIds || []).map(id => `<img src="${findCard(id)?.image || ''}" alt="">`).join('')}</span>`;
         tile.innerHTML = `
             <span class="listing-type-chip">${type === 'auction' ? '💰 Enchère' : '🔄 Échange'}</span>
+            ${seriesBadge(item)}
             ${itemVisual(item)}
             ${item.type === 'card' ? `<span class="ownership-badge ${owned ? 'owned' : 'not-owned'}">${owned ? 'Possédée' : 'Nouvelle'}</span>` : ''}
             <div class="listing-info">
@@ -377,7 +392,7 @@ async function handleCancel(listing) {
 const draft = { itemType: 'card', cardId: null, boosterType: null, quantity: 1, mode: 'auction', price: 0, wanted: [], duration: 24, cardSearch: '', wantSearch: '' };
 
 function openCreateModal(preset) {
-    Object.assign(draft, { itemType: 'card', cardId: null, boosterType: null, quantity: 1, mode: 'auction', price: 0, wanted: [], duration: 24, cardSearch: '', wantSearch: '' });
+    Object.assign(draft, { itemType: 'card', cardId: null, boosterType: null, displayType: null, quantity: 1, mode: 'auction', price: 0, wanted: [], duration: 24, cardSearch: '', wantSearch: '' });
     if (preset?.type === 'card') draft.cardId = preset.cardId;
     renderCreate();
     document.getElementById('create-modal').style.display = 'flex';
@@ -387,10 +402,12 @@ function closeCreateModal() {
 }
 
 function draftItem() {
+    if (draft.itemType === 'display') return draft.displayType ? { type: 'display', displayType: draft.displayType, quantity: draft.quantity } : null;
     if (draft.itemType === 'booster') return draft.boosterType ? { type: 'booster', boosterType: draft.boosterType, quantity: draft.quantity } : null;
     return draft.cardId ? { type: 'card', cardId: draft.cardId, quantity: draft.quantity } : null;
 }
 function maxQuantity() {
+    if (draft.itemType === 'display') return me.displayInventory?.[draft.displayType] || 0;
     if (draft.itemType === 'booster') return me.boosterInventory?.[draft.boosterType] || 0;
     return Math.max(0, (me.collection?.[draft.cardId]?.quantity || 0) - 1);
 }
@@ -419,6 +436,12 @@ function renderCreate() {
             <img src="assets/booster/booster.png" alt=""><span>${b.name}</span><small>x${n}</small></button>`;
     }).join('')}</div>`;
 
+    const displayPicker = `<div class="pick-row">${Object.entries(DISPLAY_INFO).map(([t, d]) => {
+        const n = me.displayInventory?.[t] || 0;
+        return `<button class="pick-tile booster ${t} ${draft.displayType === t ? 'selected' : ''}" data-display="${t}" ${n ? '' : 'disabled'}>
+            <img src="assets/booster/booster.png" alt=""><span>${d.name}</span><small>x${n}</small></button>`;
+    }).join('')}</div>`;
+
     const wantList = ALL_CARDS
         .filter(c => !(draft.itemType === 'card' && c.id === draft.cardId))
         .filter(c => !draft.wantSearch || cardLabel(c).toLowerCase().includes(draft.wantSearch));
@@ -429,8 +452,9 @@ function renderCreate() {
             <div class="segmented">
                 <button data-itemtype="card" class="${draft.itemType === 'card' ? 'active' : ''}">🃏 Une carte</button>
                 <button data-itemtype="booster" class="${draft.itemType === 'booster' ? 'active' : ''}">🎴 Un booster</button>
+                <button data-itemtype="display" class="${draft.itemType === 'display' ? 'active' : ''}">🗃️ Une display</button>
             </div>
-            ${draft.itemType === 'card' ? cardPicker : boosterPicker}
+            ${{ card: cardPicker, booster: boosterPicker, display: displayPicker }[draft.itemType]}
             ${item ? `
             <div class="qty-row">
                 <span>Quantité</span>
@@ -471,6 +495,7 @@ function renderCreate() {
     const rerender = () => renderCreate();
     body.querySelectorAll('[data-itemtype]').forEach(b => b.onclick = () => { draft.itemType = b.dataset.itemtype; draft.quantity = 1; rerender(); });
     body.querySelectorAll('[data-card]').forEach(b => b.onclick = () => { draft.cardId = b.dataset.card; draft.quantity = 1; draft.wanted = draft.wanted.filter(id => id !== draft.cardId); rerender(); });
+    body.querySelectorAll('[data-display]').forEach(b => b.onclick = () => { draft.displayType = b.dataset.display; draft.quantity = 1; rerender(); });
     body.querySelectorAll('[data-booster]').forEach(b => b.onclick = () => { draft.boosterType = b.dataset.booster; draft.quantity = 1; rerender(); });
     body.querySelectorAll('[data-qty]').forEach(b => b.onclick = () => { draft.quantity = Math.min(Math.max(1, draft.quantity + Number(b.dataset.qty)), Math.max(1, maxQuantity())); rerender(); });
     body.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { draft.mode = b.dataset.mode; rerender(); });

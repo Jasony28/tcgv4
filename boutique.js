@@ -1,5 +1,5 @@
-// Fichier: boutique.js — boutique du jour (3 cartes), boosters et cadeau quotidien
-import { doc, getDoc, runTransaction, increment } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+// Fichier: boutique.js — interface de la boutique (la logique est dans shop-service.js)
+import { doc, getDoc } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
 import { protectPage } from './auth-manager.js';
 import { showToast, showConfirmDialog } from './toast.js';
@@ -7,46 +7,123 @@ import { updateQuestProgress } from './quest-manager.js';
 import { updateUserStats } from './stats-manager.js';
 import { getDayKey, msUntilNextDay, formatDuration } from './daily-utils.js';
 import {
-    getDailyShop, SHOP_RARITY_ODDS, SHOP_BOOSTERS, DAILY_GIFT_COINS, RARITY_LABELS
+    getDailyShop, SHOP_RARITY_ODDS, SHOP_BOOSTERS, SHOP_DISPLAYS, SHOP_PACKS, GIFT_CALENDAR, MYSTERY_TABLE,
+    RARITY_LABELS, getDailyDeal, boosterPriceToday, displaySaving, describeBoosters
 } from './shop-config.js';
+import {
+    getShopState, getGiftStatus, packAvailability,
+    buyCard, buyBooster, buyDisplay, buyPack, claimGift
+} from './shop-service.js';
+import { isBoosterProduced } from './series-config.js';
 
-const shopCardsEl = document.getElementById('shop-cards');
-const shopBoostersEl = document.getElementById('shop-boosters');
-const countdownEl = document.getElementById('shop-countdown');
-const giftButton = document.getElementById('gift-button');
-const giftSubtitle = document.getElementById('gift-subtitle');
-const giftBanner = document.getElementById('daily-gift');
-const oddsToggle = document.getElementById('odds-toggle');
-const oddsPanel = document.getElementById('odds-panel');
-
+const $ = (id) => document.getElementById(id);
 let userData;
 let currentDay = getDayKey();
 let busy = false;
 
-/** État boutique du joueur pour aujourd'hui (remis à zéro automatiquement chaque jour). */
-function getShopState(data, day) {
-    const s = (data?.shop && data.shop.day === day) ? data.shop : {};
-    const boosters = {};
-    for (const type of Object.keys(SHOP_BOOSTERS)) boosters[type] = s.boosters?.[type] || 0;
-    return { day, bought: s.bought || {}, boosters, giftClaimed: !!s.giftClaimed };
-}
-
 const rarityClass = (rarity) => `rarity-${rarity.replace(/é/g, 'e')}`;
+const priceButton = (price, { disabled = false, label = null, oldPrice = null } = {}) => `
+    <button class="price-button" ${disabled ? 'disabled' : ''}>
+        ${label ?? `${oldPrice ? `<s>${oldPrice}</s>` : ''}<span class="coin-icon"></span>${price}`}
+    </button>`;
 
 // ---------- Affichage ----------
 
-function render() {
+function renderGift() {
+    const status = getGiftStatus(userData, currentDay);
+    $('gift-streak').textContent = `Série : jour ${status.day} / ${GIFT_CALENDAR.length}`;
+    $('gift-days').innerHTML = GIFT_CALENDAR.map((reward, i) => {
+        const day = i + 1;
+        const state = day < status.day || (day === status.day && status.claimedToday) ? 'done'
+            : (day === status.day ? 'today' : 'next');
+        return `
+            <div class="gift-day ${state} ${reward.boosters ? 'big' : ''}">
+                <span class="gift-day-label">J${day}</span>
+                <span class="gift-day-icon">${reward.boosters ? '🎁' : '🪙'}</span>
+                <span class="gift-day-reward">${reward.coins}${reward.boosters ? ' +V2' : ''}</span>
+            </div>`;
+    }).join('');
+    const btn = $('gift-button');
+    btn.disabled = status.claimedToday;
+    btn.textContent = status.claimedToday
+        ? 'Récupéré ✓ — reviens demain'
+        : `Récupérer : +${status.reward.coins} pièces${status.reward.boosters ? ' + ' + describeBoosters(status.reward.boosters) : ''}`;
+}
+
+function renderDeal() {
+    const deal = getDailyDeal(currentDay);
+    $('daily-deal').hidden = !deal.type;
+    if (!deal.type) return; // aucune série en cours
+    const def = SHOP_BOOSTERS[deal.type];
+    const state = getShopState(userData, currentDay);
+    const soldOut = state.boosters[deal.type] >= def.dailyLimit;
+    const price = boosterPriceToday(deal.type, currentDay);
+    $('daily-deal').innerHTML = `
+        <span class="deal-tag">⚡ Offre du jour · -${Math.round(deal.discount * 100)} %</span>
+        <div class="booster-item ${deal.type} deal">
+            <img src="assets/booster/booster.png" alt="">
+            <div class="booster-item-info">
+                <strong>${def.name}</strong>
+                <span>${def.description}</span>
+                <span class="booster-stock">Change à minuit</span>
+            </div>
+            ${priceButton(price, { oldPrice: def.price, disabled: soldOut || (userData.coins || 0) < price, label: soldOut ? 'Épuisé' : null })}
+        </div>`;
+    if (!soldOut) $('daily-deal').querySelector('.price-button').onclick = () => onBuyBooster(deal.type);
+}
+
+function renderPacks() {
+    $('shop-packs').innerHTML = '';
+    for (const [id, pack] of Object.entries(SHOP_PACKS)) {
+        const avail = packAvailability(userData, id);
+        const el = document.createElement('div');
+        el.className = `pack-item pack-${id} ${avail.available ? '' : 'sold'}`;
+        el.innerHTML = `
+            <div class="pack-icon">${pack.icon}</div>
+            <div class="pack-info">
+                <strong>${pack.name}</strong>
+                <span>${pack.description}</span>
+                <span class="pack-limit">${{ once: 'Une seule fois', daily: '1 par jour', weekend: 'Samedi et dimanche uniquement' }[pack.limit]}</span>
+            </div>
+            ${priceButton(pack.price, { disabled: !avail.available || (userData.coins || 0) < pack.price, label: avail.available ? null : avail.reason })}
+        `;
+        if (avail.available) el.querySelector('.price-button').onclick = () => onBuyPack(id);
+        if (id === 'mystery') {
+            el.querySelector('.pack-info').insertAdjacentHTML('beforeend',
+                `<span class="pack-odds">${MYSTERY_TABLE.map(e => `${e.chance} % ${describeBoosters(e.contents)}`).join(' · ')}</span>`);
+        }
+        $('shop-packs').appendChild(el);
+    }
+}
+
+function renderDisplays() {
+    const state = getShopState(userData, currentDay);
+    $('shop-displays').innerHTML = '';
+    for (const [type, d] of Object.entries(SHOP_DISPLAYS)) {
+        if (!isBoosterProduced(d.boosterType, currentDay)) continue; // série terminée : plus en vente
+        const soldOut = state.displays[type] >= d.dailyLimit;
+        const el = document.createElement('div');
+        el.className = `booster-item display-item ${d.boosterType} ${soldOut ? 'sold' : ''}`;
+        el.innerHTML = `
+            <div class="display-visual ${d.boosterType}">
+                <img src="assets/booster/booster.png" alt=""><img src="assets/booster/booster.png" alt=""><img src="assets/booster/booster.png" alt="">
+            </div>
+            <div class="booster-item-info">
+                <strong>${d.name}</strong>
+                <span>${d.boosters} boosters <b class="bonus">+${d.bonus} offerts</b></span>
+                <span class="booster-stock">-${displaySaving(type)} % par booster · 1 par jour</span>
+            </div>
+            ${priceButton(d.price, { disabled: soldOut || (userData.coins || 0) < d.price, label: soldOut ? 'Épuisé' : null })}
+        `;
+        if (!soldOut) el.querySelector('.price-button').onclick = () => onBuyDisplay(type);
+        $('shop-displays').appendChild(el);
+    }
+}
+
+function renderCards() {
     const state = getShopState(userData, currentDay);
     const coins = userData.coins || 0;
-
-    // Cadeau
-    giftBanner.classList.toggle('claimed', state.giftClaimed);
-    giftButton.disabled = state.giftClaimed;
-    giftButton.textContent = state.giftClaimed ? 'Récupéré ✓' : `+${DAILY_GIFT_COINS} pièces`;
-    giftSubtitle.textContent = state.giftClaimed ? 'Reviens demain pour un nouveau cadeau' : 'Des pièces gratuites chaque jour';
-
-    // Cartes du jour
-    shopCardsEl.innerHTML = '';
+    $('shop-cards').innerHTML = '';
     for (const offer of getDailyShop(currentDay)) {
         const { card, price } = offer;
         const bought = !!state.bought[card.id];
@@ -60,39 +137,49 @@ function render() {
                 ${owned === 0 ? '<span class="new-ribbon">Nouvelle</span>' : ''}
             </div>
             <p class="shop-item-name">${card.name}</p>
-            <button class="price-button" ${bought || coins < price ? 'disabled' : ''}>
-                ${bought ? 'Achetée ✓' : `<span class="coin-icon"></span>${price}`}
-            </button>
+            ${priceButton(price, { disabled: bought || coins < price, label: bought ? 'Achetée ✓' : null })}
         `;
-        if (!bought) item.querySelector('.price-button').addEventListener('click', () => buyCard(offer));
-        shopCardsEl.appendChild(item);
+        if (!bought) item.querySelector('.price-button').onclick = () => onBuyCard(offer);
+        $('shop-cards').appendChild(item);
     }
+}
 
-    // Boosters
-    shopBoostersEl.innerHTML = '';
+function renderBoosters() {
+    const state = getShopState(userData, currentDay);
+    const deal = getDailyDeal(currentDay);
+    $('shop-boosters').innerHTML = '';
     for (const [type, def] of Object.entries(SHOP_BOOSTERS)) {
-        const boughtToday = state.boosters[type] || 0;
+        if (!isBoosterProduced(type, currentDay)) continue; // série terminée : plus en vente
+        const boughtToday = state.boosters[type];
         const soldOut = boughtToday >= def.dailyLimit;
+        const price = boosterPriceToday(type, currentDay);
         const item = document.createElement('div');
         item.className = `booster-item ${type} ${soldOut ? 'sold' : ''}`;
         item.innerHTML = `
             <img src="assets/booster/booster.png" alt="${def.name}">
             <div class="booster-item-info">
-                <strong>${def.name}</strong>
+                <strong>${def.name}${deal.type === type ? ' <span class="deal-mini">-30 %</span>' : ''}</strong>
                 <span>${def.description}</span>
                 <span class="booster-stock">${boughtToday}/${def.dailyLimit} achetés aujourd'hui</span>
             </div>
-            <button class="price-button" ${soldOut || coins < def.price ? 'disabled' : ''}>
-                ${soldOut ? 'Épuisé' : `<span class="coin-icon"></span>${def.price}`}
-            </button>
+            ${priceButton(price, { oldPrice: deal.type === type ? def.price : null, disabled: soldOut || (userData.coins || 0) < price, label: soldOut ? 'Épuisé' : null })}
         `;
-        if (!soldOut) item.querySelector('.price-button').addEventListener('click', () => buyBooster(type));
-        shopBoostersEl.appendChild(item);
+        if (!soldOut) item.querySelector('.price-button').onclick = () => onBuyBooster(type);
+        $('shop-boosters').appendChild(item);
     }
 }
 
+function render() {
+    renderGift();
+    renderDeal();
+    renderPacks();
+    renderDisplays();
+    renderCards();
+    renderBoosters();
+}
+
 function renderOdds() {
-    oddsPanel.innerHTML = `
+    $('odds-panel').innerHTML = `
         <p>Chaque emplacement tire une rareté au hasard :</p>
         <ul>${SHOP_RARITY_ODDS.map(o => `<li><span class="rarity-chip ${rarityClass(o.rarity)}">${o.label}</span><strong>${o.chance}%</strong></li>`).join('')}</ul>
         <p>Maximum une légendaire par jour. La boutique change tous les jours à minuit.</p>
@@ -100,7 +187,7 @@ function renderOdds() {
 }
 
 function tick() {
-    countdownEl.textContent = formatDuration(msUntilNextDay());
+    $('shop-countdown').textContent = formatDuration(msUntilNextDay());
     // Passage à minuit : nouvelle boutique sans recharger
     const day = getDayKey();
     if (day !== currentDay) {
@@ -116,100 +203,81 @@ async function refreshUser() {
     render();
 }
 
-// ---------- Achats (transactions) ----------
+// ---------- Actions ----------
 
-async function runShopTransaction(mutate) {
-    const userRef = doc(db, "users", userData.uid);
-    await runTransaction(db, async (transaction) => {
-        const snap = await transaction.get(userRef);
-        if (!snap.exists()) throw new Error("Utilisateur non trouvé.");
-        const data = snap.data();
-        const state = getShopState(data, getDayKey());
-        const updates = mutate(data, state) || {};
-        updates.shop = state;
-        transaction.update(userRef, updates);
-    });
+/** Confirmation + achat + rafraîchissement, avec verrou anti double-clic */
+async function purchase({ title, message, action, success }) {
+    if (busy) return;
+    const ok = await showConfirmDialog({ title, message, confirmText: 'Acheter', cancelText: 'Annuler' });
+    if (!ok) return;
+    busy = true;
+    try {
+        const result = await action();
+        showToast('success', success(result), 4500);
+        await updateQuestProgress('shop_buy');
+        return result;
+    } catch (e) {
+        showToast('error', e.message || "Achat impossible.");
+    } finally {
+        busy = false;
+        await refreshUser();
+    }
 }
 
-async function buyCard(offer) {
-    if (busy) return;
+function onBuyCard(offer) {
     const { card, price } = offer;
-    const ok = await showConfirmDialog({
+    purchase({
         title: 'Acheter cette carte ?',
         message: `${card.name} (${RARITY_LABELS[card.rarity]}) pour ${price} pièces.`,
-        confirmText: 'Acheter',
-        cancelText: 'Annuler'
+        action: async () => {
+            await buyCard(userData.uid, offer);
+            await updateUserStats(userData.uid, { bestPurchase: { cardId: card.id, price } });
+            await updateQuestProgress('obtain_10_diff_cards_24h', 1, { cardId: card.id });
+        },
+        success: () => `${card.name} ajoutée à ta collection !`
     });
-    if (!ok) return;
-
-    busy = true;
-    try {
-        // On revérifie que la carte est toujours dans la boutique (passage de minuit pendant la confirmation)
-        if (!getDailyShop(getDayKey()).some(o => o.card.id === card.id)) throw new Error("La boutique vient de changer !");
-        await runShopTransaction((data, state) => {
-            if (state.bought[card.id]) throw new Error("Tu as déjà acheté cette carte aujourd'hui.");
-            if ((data.coins || 0) < price) throw new Error("Pas assez de pièces !");
-            state.bought[card.id] = true;
-            return {
-                coins: increment(-price),
-                [`collection.${card.id}.quantity`]: increment(1)
-            };
-        });
-        showToast('success', `${card.name} ajoutée à ta collection !`);
-        await updateUserStats(userData.uid, { bestPurchase: { cardId: card.id, price } });
-        await updateQuestProgress('shop_buy');
-        await updateQuestProgress('obtain_10_diff_cards_24h', 1, { cardId: card.id });
-    } catch (e) {
-        showToast('error', e.message || "Achat impossible.");
-    } finally {
-        busy = false;
-        await refreshUser();
-    }
 }
 
-async function buyBooster(type) {
-    if (busy) return;
+function onBuyBooster(type) {
     const def = SHOP_BOOSTERS[type];
-    const ok = await showConfirmDialog({
+    const price = boosterPriceToday(type, currentDay);
+    purchase({
         title: 'Acheter un booster ?',
-        message: `${def.name} pour ${def.price} pièces. Il t'attendra sur la page Booster.`,
-        confirmText: 'Acheter',
-        cancelText: 'Annuler'
+        message: `${def.name} pour ${price} pièces. Il ira dans ton inventaire (page Booster).`,
+        action: () => buyBooster(userData.uid, type),
+        success: () => `${def.name} ajouté à ton inventaire !`
     });
-    if (!ok) return;
-
-    busy = true;
-    try {
-        await runShopTransaction((data, state) => {
-            if ((state.boosters[type] || 0) >= def.dailyLimit) throw new Error("Limite du jour atteinte pour ce booster.");
-            if ((data.coins || 0) < def.price) throw new Error("Pas assez de pièces !");
-            state.boosters[type] = (state.boosters[type] || 0) + 1;
-            return {
-                coins: increment(-def.price),
-                [`boosterInventory.${type}`]: increment(1)
-            };
-        });
-        showToast('success', `${def.name} acheté ! Va l'ouvrir sur la page Booster.`);
-        await updateQuestProgress('shop_buy');
-    } catch (e) {
-        showToast('error', e.message || "Achat impossible.");
-    } finally {
-        busy = false;
-        await refreshUser();
-    }
 }
 
-async function claimGift() {
+function onBuyDisplay(type) {
+    const d = SHOP_DISPLAYS[type];
+    purchase({
+        title: `Acheter la ${d.name} ?`,
+        message: `${d.boosters + d.bonus} boosters (dont ${d.bonus} offerts) pour ${d.price} pièces. Ouvre-la quand tu veux depuis ton inventaire.`,
+        action: () => buyDisplay(userData.uid, type),
+        success: () => `${d.name} rangée dans ton inventaire (page Booster) !`
+    });
+}
+
+function onBuyPack(id) {
+    const pack = SHOP_PACKS[id];
+    purchase({
+        title: `Acheter le ${pack.name} ?`,
+        message: `${pack.description} pour ${pack.price} pièces.`,
+        action: () => buyPack(userData.uid, id),
+        success: (r) => `${r.label ? (r.label === 'JACKPOT' ? '💥 JACKPOT ! ' : `${r.label} ! `) : ''}Tu reçois : ${describeBoosters(r.contents)}${r.coins ? ` + ${r.coins} pièces` : ''}. Tout est dans ton inventaire !`
+    });
+}
+
+async function onClaimGift() {
     if (busy) return;
     busy = true;
-    giftButton.disabled = true;
+    $('gift-button').disabled = true;
     try {
-        await runShopTransaction((data, state) => {
-            if (state.giftClaimed) throw new Error("Cadeau déjà récupéré aujourd'hui.");
-            state.giftClaimed = true;
-            return { coins: increment(DAILY_GIFT_COINS) };
-        });
-        showToast('success', `+${DAILY_GIFT_COINS} pièces ! Reviens demain.`);
+        const status = await claimGift(userData.uid);
+        const boosters = describeBoosters(status.reward.boosters);
+        const extra = boosters ? ` + ${boosters}` : '';
+        showToast('success', `Jour ${status.day} : +${status.reward.coins} pièces${extra} ! Reviens demain.`);
     } catch (e) {
         showToast('error', e.message || "Impossible de récupérer le cadeau.");
     } finally {
@@ -224,10 +292,11 @@ async function initializeShop() {
     userData = await protectPage();
     if (!userData) return;
 
-    giftButton.addEventListener('click', claimGift);
-    oddsToggle.addEventListener('click', () => {
-        oddsPanel.hidden = !oddsPanel.hidden;
-        oddsToggle.setAttribute('aria-expanded', String(!oddsPanel.hidden));
+    $('gift-button').addEventListener('click', onClaimGift);
+    $('odds-toggle').addEventListener('click', () => {
+        const panel = $('odds-panel');
+        panel.hidden = !panel.hidden;
+        $('odds-toggle').setAttribute('aria-expanded', String(!panel.hidden));
     });
 
     renderOdds();
