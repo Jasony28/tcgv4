@@ -1,0 +1,34 @@
+{
+  "name": "Ronce-Mordante",
+  "suffix": null,
+  "city": "Terres Sauvages Corrompues",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Fouet d'Épine",
+      "damage": 20,
+      "cost": [
+        "Plante"
+      ]
+    },
+    {
+      "name": "Lacération",
+      "damage": 30,
+      "cost": [
+        "Plante",
+        "incolore"
+      ]
+    }
+  ],
+  "rarity": "Commune",
+  "type": "Plante",
+  "type2": "Acier",
+  "hp": 60,
+  "flavor": "Ses lianes s'enroulent autour des barrières métalliques abandonnées pour imiter des pièges mortels dans les bois sombres.",
+  "weakness": "Feu",
+  "retreat": 1,
+  "number": "025/035",
+  "id": "V3_025",
+  "art": "C:/Users/jason/Desktop/Cartev3/Ronce-Mordante.jpg"
+}

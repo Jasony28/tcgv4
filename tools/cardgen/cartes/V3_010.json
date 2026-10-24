@@ -1,0 +1,34 @@
+{
+  "name": "Fenrir Brise-Monde",
+  "suffix": "EX",
+  "city": "Cyber-Mythologie",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Mâchoire Ragnarök",
+      "damage": 230,
+      "cost": [
+        "Acier",
+        "Acier",
+        "Plasma",
+        "incolore"
+      ],
+      "text": "Défaussez 2 énergies attachées à cette carte."
+    }
+  ],
+  "rarity": "Légendaire",
+  "type": "Acier",
+  "type2": "Plasma",
+  "hp": 280,
+  "ability": {
+    "name": "Surcharge Runique",
+    "text": "Tant que cette carte est en jeu, vos créatures de type Acier infligent +30 dégâts."
+  },
+  "flavor": "Enchaîné pendant mille ans au cœur d'un serveur orbital, le loup divin a brisé ses liens numériques pour dévorer le soleil.",
+  "weakness": "Feu",
+  "retreat": 2,
+  "number": "010/035",
+  "id": "V3_010",
+  "art": "C:/Users/jason/Desktop/Cartev3/Fenrir Brise-Monde EX.jpg"
+}

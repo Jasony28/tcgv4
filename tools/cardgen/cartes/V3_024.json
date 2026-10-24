@@ -1,0 +1,34 @@
+{
+  "name": "Champignon-Sporo",
+  "suffix": null,
+  "city": "Terres Sauvages Corrompues",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Poudre Toxique",
+      "damage": 10,
+      "cost": [
+        "Plante"
+      ],
+      "text": "La carte adverse est Empoisonnée."
+    },
+    {
+      "name": "Coup de Chapeau",
+      "damage": 20,
+      "cost": [
+        "Plante"
+      ]
+    }
+  ],
+  "rarity": "Commune",
+  "type": "Plante",
+  "type2": "Ombre",
+  "hp": 50,
+  "flavor": "Il pousse sur les souches d'arbres calcinés. Ses spores provoquent de profonds cauchemars à quiconque les respire.",
+  "weakness": "Feu",
+  "retreat": 1,
+  "number": "024/035",
+  "id": "V3_024",
+  "art": "C:/Users/jason/Desktop/Cartev3/Champignon-Sporo.jpg"
+}

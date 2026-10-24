@@ -1,0 +1,34 @@
+{
+  "name": "Chronos-Titan",
+  "suffix": "EX",
+  "city": "Cyber-Mythologie",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Impact Zéro",
+      "damage": 260,
+      "cost": [
+        "Plasma",
+        "Plasma",
+        "Cristal",
+        "incolore"
+      ],
+      "text": "Cette carte ne peut pas attaquer au tour suivant."
+    }
+  ],
+  "rarity": "Légendaire",
+  "type": "Plasma",
+  "type2": "Cristal",
+  "hp": 310,
+  "ability": {
+    "name": "Boucle Temporelle",
+    "text": "Une fois par partie, si cette carte allait être mise K.O., restaurez ses PV à 50 à la place."
+  },
+  "flavor": "Le maître absolu du temps et des circuits quantiques. Il peut remonter le flux d'un combat en une fraction de nanoseconde.",
+  "weakness": "Ombre",
+  "retreat": 3,
+  "number": "011/035",
+  "id": "V3_011",
+  "art": "C:/Users/jason/Desktop/Cartev3/Chronos-Titan EX.jpg"
+}

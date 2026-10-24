@@ -1,0 +1,35 @@
+{
+  "name": "Vipère-Fibre",
+  "suffix": null,
+  "city": "Cyber-Mythologie",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Morsure Fibre optique",
+      "damage": 20,
+      "cost": [
+        "Plasma"
+      ]
+    },
+    {
+      "name": "Éclair tressé",
+      "damage": 30,
+      "cost": [
+        "Plasma",
+        "incolore"
+      ],
+      "text": "Lancez une pièce. Si c'est pile, cette carte s'inflige 10 dégâts."
+    }
+  ],
+  "rarity": "Commune",
+  "type": "Plasma",
+  "type2": "Ombre",
+  "hp": 60,
+  "flavor": "Ses écailles transmettent des gigaobits d'informations par seconde en glissant le long des câbles souterrains.",
+  "weakness": "Glace",
+  "retreat": 1,
+  "number": "003/035",
+  "id": "V3_003",
+  "art": "C:/Users/jason/Desktop/Cartev3/Vipère-Fibre.jpg"
+}

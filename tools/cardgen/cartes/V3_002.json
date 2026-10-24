@@ -1,0 +1,34 @@
+{
+  "name": "Drone-Skarab",
+  "suffix": null,
+  "city": "Cyber-Mythologie",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Scan Rapide",
+      "damage": 10,
+      "cost": [
+        "Acier"
+      ],
+      "text": "Regardez la carte du dessus de votre deck."
+    },
+    {
+      "name": "Griffe de Fer",
+      "damage": 20,
+      "cost": [
+        "Acier"
+      ]
+    }
+  ],
+  "rarity": "Commune",
+  "type": "Acier",
+  "type2": "Électrique",
+  "hp": 50,
+  "flavor": "Il patrouille sans relâche dans les couloirs des serveurs abandonnés pour éliminer les parasites de données.",
+  "weakness": "Feu",
+  "retreat": 1,
+  "number": "002/035",
+  "id": "V3_002",
+  "art": "C:/Users/jason/Desktop/Cartev3/Drone-Skarab.jpg"
+}

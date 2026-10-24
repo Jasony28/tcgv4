@@ -1,0 +1,39 @@
+{
+  "name": "Sanglier-Basalte",
+  "suffix": null,
+  "city": "Terres Sauvages Corrompues",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Charge Incandescente",
+      "damage": 50,
+      "cost": [
+        "Roche",
+        "Feu",
+        "incolore"
+      ],
+      "text": "La carte adverse est Brûlée."
+    },
+    {
+      "name": "Cogne-Roc",
+      "damage": 80,
+      "cost": [
+        "Roche",
+        "Feu",
+        "incolore"
+      ],
+      "text": "Cette carte s'inflige 10 dégâts."
+    }
+  ],
+  "rarity": "Rare",
+  "type": "Roche",
+  "type2": "Feu",
+  "hp": 130,
+  "flavor": "Sa peau est constituée de plaques de roche volcanique en fusion. Il charge tout ce qui se dresse sur son territoire.",
+  "weakness": "Eau",
+  "retreat": 3,
+  "number": "028/035",
+  "id": "V3_028",
+  "art": "C:/Users/jason/Desktop/Cartev3/Sanglier-Basalte.jpg"
+}

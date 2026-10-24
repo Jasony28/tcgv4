@@ -1,0 +1,35 @@
+{
+  "name": "Louveteau d'Écorce",
+  "suffix": null,
+  "city": "Terres Sauvages Corrompues",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Griffe d'Épine",
+      "damage": 20,
+      "cost": [
+        "Plante"
+      ]
+    },
+    {
+      "name": "Hurlement de Sève",
+      "damage": 30,
+      "cost": [
+        "Plante",
+        "incolore"
+      ],
+      "text": "Soigne 10 PV à cette carte."
+    }
+  ],
+  "rarity": "Commune",
+  "type": "Plante",
+  "type2": "Ombre",
+  "hp": 70,
+  "flavor": "Né dans les racines d'un arbre maudit, son pelage de mousse violette le rend invisible dans la brume nocturne.",
+  "weakness": "Feu",
+  "retreat": 1,
+  "number": "023/035",
+  "id": "V3_023",
+  "art": "C:/Users/jason/Desktop/Cartev3/Louveteau d'Écorce.jpg"
+}

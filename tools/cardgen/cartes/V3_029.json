@@ -1,0 +1,37 @@
+{
+  "name": "Panthère-Roncière",
+  "suffix": null,
+  "city": "Terres Sauvages Corrompues",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Griffe de Sève",
+      "damage": 40,
+      "cost": [
+        "Plante",
+        "incolore"
+      ]
+    },
+    {
+      "name": "Ombre Vénéneuse",
+      "damage": 80,
+      "cost": [
+        "Plante",
+        "Ombre",
+        "incolore"
+      ],
+      "text": "Le coût de retraite de la cible augmente de 1 au prochain tour."
+    }
+  ],
+  "rarity": "Rare",
+  "type": "Plante",
+  "type2": "Ombre",
+  "hp": 110,
+  "flavor": "Elle se fond parfaitement dans les feuillages toxiques de la forêt maudite, invisible avant de frapper mortellement.",
+  "weakness": "Feu",
+  "retreat": 1,
+  "number": "029/035",
+  "id": "V3_029",
+  "art": "C:/Users/jason/Desktop/Cartev3/Panthère-Roncière.jpg"
+}

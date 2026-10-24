@@ -1,0 +1,37 @@
+{
+  "name": "Requin-Prisme",
+  "suffix": null,
+  "city": "Abysses & Bioluminescence",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Aileron Tranchant",
+      "damage": 40,
+      "cost": [
+        "Eau",
+        "incolore"
+      ]
+    },
+    {
+      "name": "Morsure Réfractaire",
+      "damage": 90,
+      "cost": [
+        "Eau",
+        "Cristal",
+        "incolore"
+      ],
+      "text": "Au prochain tour, cette carte subit 20 dégâts de moins."
+    }
+  ],
+  "rarity": "Rare",
+  "type": "Eau",
+  "type2": "Cristal",
+  "hp": 120,
+  "flavor": "Ses écailles en quartz pur reflètent la bioluminescence des grands fonds pour aveugler ses proies avant l'impact.",
+  "weakness": "Plante",
+  "retreat": 1,
+  "number": "015/035",
+  "id": "V3_015",
+  "art": "C:/Users/jason/Desktop/Cartev3/Requin-Prisme.jpg"
+}

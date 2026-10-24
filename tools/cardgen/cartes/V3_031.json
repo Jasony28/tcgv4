@@ -1,0 +1,34 @@
+{
+  "name": "Chimère Sylvestre",
+  "suffix": "EX",
+  "city": "Terres Sauvages Corrompues",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Fouet Cataclysmique",
+      "damage": 150,
+      "cost": [
+        "Plante",
+        "Plante",
+        "Dragon",
+        "incolore"
+      ],
+      "text": "L'adversaire doit défausser une carte de son banc."
+    }
+  ],
+  "rarity": "epique",
+  "type": "Plante",
+  "type2": "Dragon",
+  "hp": 210,
+  "ability": {
+    "name": "Racines Profondes",
+    "text": "Au début de votre tour, soignez 20 PV à cette carte si elle est sur le poste actif."
+  },
+  "flavor": "Un monstre hybride composé de bois millénaire et d'écailles de dragon vert. Il protège farouchement le cœur de la forêt.",
+  "weakness": "Feu",
+  "retreat": 3,
+  "number": "031/035",
+  "id": "V3_031",
+  "art": "C:/Users/jason/Desktop/Cartev3/Chimère Sylvestre EX.jpg"
+}

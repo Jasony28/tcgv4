@@ -1,0 +1,34 @@
+{
+  "name": "Kraken Vortex",
+  "suffix": null,
+  "city": "Abysses & Bioluminescence",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Broyeur Abyssal",
+      "damage": 160,
+      "cost": [
+        "Abysses",
+        "Abysses",
+        "Eau",
+        "incolore"
+      ],
+      "text": "Défaussez une carte aléatoire de la main de votre adversaire."
+    }
+  ],
+  "rarity": "epique",
+  "type": "Abysses",
+  "type2": "Eau",
+  "hp": 210,
+  "ability": {
+    "name": "Étreinte des Profondeurs",
+    "text": "Le coût de retraite de la carte active adverse est augmenté de 2 énergies."
+  },
+  "flavor": "Il génère des tourbillons magnétiques au fond de l'océan, entraînant les épaves et les sous-marins dans son repaire.",
+  "weakness": "Électrique",
+  "retreat": 3,
+  "number": "018/035",
+  "id": "V3_018",
+  "art": "C:/Users/jason/Desktop/Cartev3/Kraken Vortex.jpg"
+}

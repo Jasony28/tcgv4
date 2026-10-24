@@ -1,0 +1,34 @@
+{
+  "name": "Golem Cendre-Spore",
+  "suffix": null,
+  "city": "Terres Sauvages Corrompues",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Fracas Volcanique",
+      "damage": 170,
+      "cost": [
+        "Roche",
+        "Roche",
+        "Ombre",
+        "incolore"
+      ],
+      "text": "Cette carte ne peut pas attaquer lors de votre prochain tour."
+    }
+  ],
+  "rarity": "epique",
+  "type": "Roche",
+  "type2": "Ombre",
+  "hp": 220,
+  "ability": {
+    "name": "Carapace Fongique",
+    "text": "Si cette carte subit des dégâts d'une attaque, placez 3 marqueurs de dégâts sur l'attaquant."
+  },
+  "flavor": "Un colosse de basalte animé par une colonie de champignons anciens. Chaque pas libère un nuage de spores soporifiques.",
+  "weakness": "Plante",
+  "retreat": 4,
+  "number": "030/035",
+  "id": "V3_030",
+  "art": "C:/Users/jason/Desktop/Cartev3/Golem Cendre-Spore.jpg"
+}

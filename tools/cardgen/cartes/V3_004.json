@@ -1,0 +1,33 @@
+{
+  "name": "Harpie-Sonar",
+  "suffix": null,
+  "city": "Cyber-Mythologie",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Plongeon Laser",
+      "damage": 80,
+      "cost": [
+        "Vent",
+        "Plasma",
+        "incolore"
+      ],
+      "text": "Cette attaque ne tient pas compte de la Résistance de l'adversaire."
+    }
+  ],
+  "rarity": "Rare",
+  "type": "Vent",
+  "type2": "Plasma",
+  "hp": 110,
+  "ability": {
+    "name": "Radar Acoustique",
+    "text": "Une fois pendant votre tour, vous pouvez regarder la carte du dessus du deck adverse."
+  },
+  "flavor": "Ses ailes métalliques fendent l'air à la vitesse du son. Son cri brouille tous les systèmes électroniques à 5 kilomètres.",
+  "weakness": "Électrique",
+  "retreat": 1,
+  "number": "004/035",
+  "id": "V3_004",
+  "art": "C:/Users/jason/Desktop/Cartev3/Harpie-Sonar.jpg"
+}

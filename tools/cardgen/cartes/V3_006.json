@@ -1,0 +1,38 @@
+{
+  "name": "Chimère-Processeur",
+  "suffix": null,
+  "city": "Cyber-Mythologie",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Griffes Multi-Threads",
+      "damage": 40,
+      "cost": [
+        "Plasma",
+        "incolore"
+      ],
+      "text": "Frappe deux fois de suite."
+    },
+    {
+      "name": "Surtension Centrale",
+      "damage": 90,
+      "cost": [
+        "Plasma",
+        "Combat",
+        "incolore"
+      ],
+      "text": "Défaussez une énergie attachée à cette carte."
+    }
+  ],
+  "rarity": "Rare",
+  "type": "Plasma",
+  "type2": "Combat",
+  "hp": 120,
+  "flavor": "Un assemblage de trois têtes artificielles qui calculent simultanément la meilleure stratégie de combat.",
+  "weakness": "Feu",
+  "retreat": 2,
+  "number": "006/035",
+  "id": "V3_006",
+  "art": "C:/Users/jason/Desktop/Cartev3/Chimère-Processeur.jpg"
+}

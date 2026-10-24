@@ -1,0 +1,38 @@
+{
+  "name": "Cerf Braise-Ronce",
+  "suffix": null,
+  "city": "Terres Sauvages Corrompues",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Charge Boisée",
+      "damage": 50,
+      "cost": [
+        "Plante",
+        "Feu",
+        "incolore"
+      ]
+    },
+    {
+      "name": "Ramure Toxique",
+      "damage": 100,
+      "cost": [
+        "Plante",
+        "Feu",
+        "incolore"
+      ],
+      "text": "La carte adverse est maintenant Empoisonnée et Brûlée."
+    }
+  ],
+  "rarity": "Rare",
+  "type": "Plante",
+  "type2": "Feu",
+  "hp": 130,
+  "flavor": "Ses bois de ronces noires brûlent d'un feu éternel vert. Là où ses sabots frappent le sol, des fleurs vénéneuses éclosent.",
+  "weakness": "Eau",
+  "retreat": 2,
+  "number": "026/035",
+  "id": "V3_026",
+  "art": "C:/Users/jason/Desktop/Cartev3/Cerf Braise-Ronce.jpg"
+}

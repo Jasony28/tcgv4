@@ -1,0 +1,33 @@
+{
+  "name": "Sentinelle-Arc",
+  "suffix": null,
+  "city": "Cyber-Mythologie",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Canon Tesla",
+      "damage": 70,
+      "cost": [
+        "Acier",
+        "Électrique",
+        "incolore"
+      ],
+      "text": "La carte adverse est maintenant Paralysée."
+    }
+  ],
+  "rarity": "Rare",
+  "type": "Acier",
+  "type2": "Électrique",
+  "hp": 100,
+  "ability": {
+    "name": "Bouclier de Flux",
+    "text": "Réduit de 20 les dégâts infligés par les attaques adverses."
+  },
+  "flavor": "Ancien soldat robotique de garnison, son canon à arc électrique n'a jamais connu la panne en un siècle.",
+  "weakness": "Combat",
+  "retreat": 2,
+  "number": "005/035",
+  "id": "V3_005",
+  "art": "C:/Users/jason/Desktop/Cartev3/Sentinelle-Arc.jpg"
+}

@@ -1,0 +1,34 @@
+{
+  "name": "Minotaure V8",
+  "suffix": null,
+  "city": "Cyber-Mythologie",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Charge Bélier",
+      "damage": 150,
+      "cost": [
+        "Combat",
+        "Combat",
+        "Acier",
+        "incolore"
+      ],
+      "text": "Cette carte s'inflige 20 dégâts à elle-même."
+    }
+  ],
+  "rarity": "epique",
+  "type": "Combat",
+  "type2": "Acier",
+  "hp": 190,
+  "ability": {
+    "name": "Surchauffe Hydraulique",
+    "text": "Tant qu'il reste moins de 100 PV à cette carte, ses attaques infligent +50 dégâts."
+  },
+  "flavor": "Gardien d'un labyrinthe souterrain blindé, son cœur est un réacteur à fusion qui rugit comme un moteur lancé à plein régime.",
+  "weakness": "Feu",
+  "retreat": 3,
+  "number": "007/035",
+  "id": "V3_007",
+  "art": "C:/Users/jason/Desktop/Cartev3/Minotaure V8.jpg"
+}

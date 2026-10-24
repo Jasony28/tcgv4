@@ -1,0 +1,33 @@
+{
+  "name": "Sirène des Abysses",
+  "suffix": null,
+  "city": "Abysses & Bioluminescence",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Vague Stellaire",
+      "damage": 120,
+      "cost": [
+        "Abysses",
+        "Cristal",
+        "incolore"
+      ],
+      "text": "Soigne 20 PV à cette carte."
+    }
+  ],
+  "rarity": "epique",
+  "type": "Abysses",
+  "type2": "Cristal",
+  "hp": 170,
+  "ability": {
+    "name": "Chant Hypnotique",
+    "text": "Une fois par tour, changez la carte active adverse par l'une de ses cartes de banc."
+  },
+  "flavor": "Son chant mélodieux résonne à travers les failles océaniques, attirant les explorateurs vers un sommeil éternel.",
+  "weakness": "Électrique",
+  "retreat": 1,
+  "number": "020/035",
+  "id": "V3_020",
+  "art": "C:/Users/jason/Desktop/Cartev3/Sirène des Abysses.jpg"
+}

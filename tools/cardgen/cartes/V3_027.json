@@ -1,0 +1,33 @@
+{
+  "name": "Corbeau-Cendre",
+  "suffix": null,
+  "city": "Terres Sauvages Corrompues",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Plume Empoisonnée",
+      "damage": 60,
+      "cost": [
+        "Vent",
+        "Ombre",
+        "incolore"
+      ],
+      "text": "La carte adverse est Empoisonnée."
+    }
+  ],
+  "rarity": "Rare",
+  "type": "Vent",
+  "type2": "Ombre",
+  "hp": 90,
+  "ability": {
+    "name": "Vol de Charognard",
+    "text": "Si une créature adverse est mis K.O., piochez une carte supplémentaire."
+  },
+  "flavor": "Il survole les forêts calcinées en quête de restes magiques. Son cri annonce la venue d'une tempête de cendres.",
+  "weakness": "Électrique",
+  "retreat": 1,
+  "number": "027/035",
+  "id": "V3_027",
+  "art": "C:/Users/jason/Desktop/Cartev3/Corbeau-Cendre.jpg"
+}

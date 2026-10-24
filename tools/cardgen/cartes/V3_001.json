@@ -1,0 +1,35 @@
+{
+  "name": "Scarab-Octet",
+  "suffix": null,
+  "city": "Cyber-Mythologie",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Court-Circuit",
+      "damage": 10,
+      "cost": [
+        "Acier"
+      ],
+      "text": "Lancez une pièce. Si c'est face, la carte adverse est Paralysée."
+    },
+    {
+      "name": "Pince de Cuivre",
+      "damage": 30,
+      "cost": [
+        "Acier",
+        "incolore"
+      ]
+    }
+  ],
+  "rarity": "Commune",
+  "type": "Acier",
+  "type2": "Électrique",
+  "hp": 60,
+  "flavor": "Il se nourrit des vieux câbles oubliés dans les ruines des temples. Sa carapace brille quand il est chargé à bloc.",
+  "weakness": "Feu",
+  "retreat": 1,
+  "number": "001/035",
+  "id": "V3_001",
+  "art": "C:/Users/jason/Desktop/Cartev3/Scarab-Octet.jpg"
+}

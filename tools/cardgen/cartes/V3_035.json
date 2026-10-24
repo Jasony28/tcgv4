@@ -1,0 +1,34 @@
+{
+  "name": "Anacore-Apex le Dévoreur",
+  "suffix": null,
+  "city": "Terres Sauvages Corrompues",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Morsure du Néant",
+      "damage": 270,
+      "cost": [
+        "Dragon",
+        "Dragon",
+        "Ombre",
+        "incolore"
+      ],
+      "text": "Cette carte s'inflige 30 dégâts."
+    }
+  ],
+  "rarity": "Légendaire",
+  "type": "Dragon",
+  "type2": "Ombre",
+  "hp": 310,
+  "ability": {
+    "name": "Prédateur Suprême",
+    "text": "Les attaques de cette carte ignorent tous les effets de défense et de réduction de dégâts de la cible."
+  },
+  "flavor": "Le prédateur ultime des terres sauvages. Sa férocité est telle qu'il peut déchirer le tissu même de l'espace pour attraper ses proies.",
+  "weakness": "Lumière",
+  "retreat": 3,
+  "number": "035/035",
+  "id": "V3_035",
+  "art": "C:/Users/jason/Desktop/Cartev3/Anacore-Apex le Dévoreur.jpg"
+}

@@ -1,0 +1,33 @@
+{
+  "name": "Tortue-Abyssale",
+  "suffix": "EX",
+  "city": "Abysses & Bioluminescence",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Hydro-Impact",
+      "damage": 140,
+      "cost": [
+        "Eau",
+        "Eau",
+        "Roche",
+        "incolore"
+      ]
+    }
+  ],
+  "rarity": "epique",
+  "type": "Eau",
+  "type2": "Roche",
+  "hp": 200,
+  "ability": {
+    "name": "Carapace de Tranchée",
+    "text": "Les attaques directes de l'adversaire subissent un retour de 20 dégâts."
+  },
+  "flavor": "Portant sur son dos des ruines antiques couvertes de coraux lumineux, elle traverse les océans comme une île mobile.",
+  "weakness": "Plante",
+  "retreat": 3,
+  "number": "019/035",
+  "id": "V3_019",
+  "art": "C:/Users/jason/Desktop/Cartev3/Tortue-Abyssale EX.jpg"
+}

@@ -1,0 +1,34 @@
+{
+  "name": "Poséidon des Abysses",
+  "suffix": "EX",
+  "city": "Abysses & Bioluminescence",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Trident du Gouffre",
+      "damage": 250,
+      "cost": [
+        "Abysses",
+        "Abysses",
+        "Eau",
+        "incolore"
+      ],
+      "text": "Défaussez 2 énergies attachées à cette carte."
+    }
+  ],
+  "rarity": "Légendaire",
+  "type": "Abysses",
+  "type2": "Eau",
+  "hp": 300,
+  "ability": {
+    "name": "Colère des Profondeurs",
+    "text": "Tant que cette carte a des dégâts, ses attaques infligent +40 dégâts."
+  },
+  "flavor": "Le souverain mythique des fosses océaniques profondes. Son trident génère des tsunamis capables de submerger des continents.",
+  "weakness": "Électrique",
+  "retreat": 3,
+  "number": "022/035",
+  "id": "V3_022",
+  "art": "C:/Users/jason/Desktop/Cartev3/Poséidon des Abysses EX.jpg"
+}

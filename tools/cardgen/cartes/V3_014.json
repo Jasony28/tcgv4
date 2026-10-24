@@ -1,0 +1,35 @@
+{
+  "name": "Anguille-Abysse",
+  "suffix": null,
+  "city": "Abysses & Bioluminescence",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Étincelle Noire",
+      "damage": 10,
+      "cost": [
+        "Abysses"
+      ],
+      "text": "La carte adverse perd 10 PV supplémentaires au prochain tour."
+    },
+    {
+      "name": "Fouet Glissant",
+      "damage": 25,
+      "cost": [
+        "Abysses",
+        "incolore"
+      ]
+    }
+  ],
+  "rarity": "Commune",
+  "type": "Abysses",
+  "type2": "Électrique",
+  "hp": 50,
+  "flavor": "Elle serpente dans les tranchées sous-marines en produisant des éclairs violets pour paralyser de petits crustacés.",
+  "weakness": "Plante",
+  "retreat": 1,
+  "number": "014/035",
+  "id": "V3_014",
+  "art": "C:/Users/jason/Desktop/Cartev3/Anguille-Abysse.jpg"
+}

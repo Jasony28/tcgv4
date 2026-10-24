@@ -1,0 +1,37 @@
+{
+  "name": "Calamar-Sonar",
+  "suffix": null,
+  "city": "Abysses & Bioluminescence",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Encre Phosphorescente",
+      "damage": 30,
+      "cost": [
+        "Abysses",
+        "incolore"
+      ],
+      "text": "L'attaque de la cible inflige 20 dégâts de moins au prochain tour."
+    },
+    {
+      "name": "10 Tentacules",
+      "damage": 70,
+      "cost": [
+        "Abysses",
+        "Ombre",
+        "incolore"
+      ]
+    }
+  ],
+  "rarity": "Rare",
+  "type": "Abysses",
+  "type2": "Ombre",
+  "hp": 100,
+  "flavor": "Il projette des nuages d'encre lumineuse pour aveugler ses proies avant de fondre sur elles dans l'obscurité totale.",
+  "weakness": "Électrique",
+  "retreat": 1,
+  "number": "017/035",
+  "id": "V3_017",
+  "art": "C:/Users/jason/Desktop/Cartev3/Calamar-Sonar.jpg"
+}

@@ -1,0 +1,34 @@
+{
+  "name": "Dragon des Cendres",
+  "suffix": null,
+  "city": "Terres Sauvages Corrompues",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Flamme Fumante",
+      "damage": 160,
+      "cost": [
+        "Feu",
+        "Feu",
+        "Ombre",
+        "incolore"
+      ],
+      "text": "La carte adverse est Brûlée."
+    }
+  ],
+  "rarity": "epique",
+  "type": "Feu",
+  "type2": "Ombre",
+  "hp": 220,
+  "ability": {
+    "name": "Aura de Suie",
+    "text": "Les attaques de l'adversaire infligent 20 dégâts de moins si cette carte a plus de la moitié de ses PV."
+  },
+  "flavor": "Né des cendres d'un incendie magique géant, il crache des flammes noires qui étouffent la lumière du jour.",
+  "weakness": "Eau",
+  "retreat": 2,
+  "number": "032/035",
+  "id": "V3_032",
+  "art": "C:/Users/jason/Desktop/Cartev3/Dragon des Cendres.jpg"
+}

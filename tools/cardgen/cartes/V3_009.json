@@ -1,0 +1,34 @@
+{
+  "name": "Pégase-Hydraulique",
+  "suffix": null,
+  "city": "Cyber-Mythologie",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Frappe Supersonique",
+      "damage": 130,
+      "cost": [
+        "Acier",
+        "Acier",
+        "Vent",
+        "incolore"
+      ],
+      "text": "Ignore les effets en action sur la carte adverse."
+    }
+  ],
+  "rarity": "epique",
+  "type": "Acier",
+  "type2": "Vent",
+  "hp": 170,
+  "ability": {
+    "name": "Propulsion Céleste",
+    "text": "Le coût de retraite de cette carte est de 0."
+  },
+  "flavor": "Ses ailes de titane propulsées par des vérins à haute pression fendent les nuages pollués sans un bruit.",
+  "weakness": "Électrique",
+  "retreat": 1,
+  "number": "009/035",
+  "id": "V3_009",
+  "art": "C:/Users/jason/Desktop/Cartev3/Pégase-Hydraulique.jpg"
+}

@@ -1,0 +1,34 @@
+{
+  "name": "Léviathan du Nadir",
+  "suffix": "EX",
+  "city": "Abysses & Bioluminescence",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Tsunami Ultraviolet",
+      "damage": 210,
+      "cost": [
+        "Abysses",
+        "Abysses",
+        "Cristal",
+        "incolore"
+      ],
+      "text": "Inflige également 30 dégâts à toutes les cartes de réserve de l'adversaire."
+    }
+  ],
+  "rarity": "Légendaire",
+  "type": "Abysses",
+  "type2": "Cristal",
+  "hp": 290,
+  "ability": {
+    "name": "Pression des Fosses",
+    "text": "Réduit de 40 tous les dégâts subis par cette carte."
+  },
+  "flavor": "Souverain silencieux du point le plus profond du monde. Quand il ouvre les yeux, l'océan tout entier s'illumine.",
+  "weakness": "Électrique",
+  "retreat": 3,
+  "number": "021/035",
+  "id": "V3_021",
+  "art": "C:/Users/jason/Desktop/Cartev3/Léviathan du Nadir EX.jpg"
+}

@@ -1,0 +1,33 @@
+{
+  "name": "Raie-Manta Néon",
+  "suffix": null,
+  "city": "Abysses & Bioluminescence",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Aile Électrique",
+      "damage": 80,
+      "cost": [
+        "Eau",
+        "Plasma",
+        "incolore"
+      ],
+      "text": "Lancez une pièce. Si c'est face, l'adversaire est Paralysé."
+    }
+  ],
+  "rarity": "Rare",
+  "type": "Eau",
+  "type2": "Plasma",
+  "hp": 110,
+  "ability": {
+    "name": "Plan Planant",
+    "text": "Réduit de 10 les dégâts subis par vos créatures de banc."
+  },
+  "flavor": "Elle plane majestueusement dans les courants profonds comme un vaisseau spatial sous-marin illuminé de néons bleus.",
+  "weakness": "Électrique",
+  "retreat": 1,
+  "number": "016/035",
+  "id": "V3_016",
+  "art": "C:/Users/jason/Desktop/Cartev3/Raie-Manta Néon.jpg"
+}

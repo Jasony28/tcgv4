@@ -1,0 +1,33 @@
+{
+  "name": "Sphinx-Plasma",
+  "suffix": null,
+  "city": "Cyber-Mythologie",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Rayon Zénith",
+      "damage": 140,
+      "cost": [
+        "Plasma",
+        "Plasma",
+        "Vent",
+        "incolore"
+      ]
+    }
+  ],
+  "rarity": "epique",
+  "type": "Plasma",
+  "type2": "Vent",
+  "hp": 180,
+  "ability": {
+    "name": "Énigme Quantique",
+    "text": "Une fois par tour, devinez si une pièce tombe sur face ou pile. Si vous avez raison, piochez 2 cartes."
+  },
+  "flavor": "Il pose des énigmes logiques aux voyageurs égarés. Ceux qui échouent sont vaporisés par son regard laser.",
+  "weakness": "Électrique",
+  "retreat": 2,
+  "number": "008/035",
+  "id": "V3_008",
+  "art": "C:/Users/jason/Desktop/Cartev3/Sphinx-Plasma.jpg"
+}

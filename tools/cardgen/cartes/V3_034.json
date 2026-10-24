@@ -1,0 +1,34 @@
+{
+  "name": "Gaia Corrompue",
+  "suffix": "EX",
+  "city": "Terres Sauvages Corrompues",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Racines du Jugement",
+      "damage": 240,
+      "cost": [
+        "Plante",
+        "Plante",
+        "Ombre",
+        "incolore"
+      ],
+      "text": "Placez 2 marqueurs de dégâts sur chacune des cartes de réserve adverses."
+    }
+  ],
+  "rarity": "Légendaire",
+  "type": "Plante",
+  "type2": "Ombre",
+  "hp": 320,
+  "ability": {
+    "name": "Renaissance de la Terre",
+    "text": "Une fois par partie, ramenez une créature de votre pile de défausse directement sur votre banc avec toutes ses énergies."
+  },
+  "flavor": "L'esprit tutélaire de la nature qui a basculé dans l'obscurité après la pollution des hommes. Elle cherche à réinitialiser la biosphère.",
+  "weakness": "Feu",
+  "retreat": 3,
+  "number": "034/035",
+  "id": "V3_034",
+  "art": "C:/Users/jason/Desktop/Cartev3/Gaia Corrompue EX.jpg"
+}

@@ -32,11 +32,15 @@ export async function renderWindow({ g, card, art, T, FR, W, H, B, rand, helpers
     g.save(); g.beginPath(); g.moveTo(40, 34); g.lineTo(168, 34); g.lineTo(150, 64); g.lineTo(40, 64); g.closePath();
     g.fillStyle = metal(40, 34, 168, 64, ['#ffffff', '#b8bec5', '#f2f4f6']); g.shadowColor = 'rgba(0,0,0,.3)'; g.shadowBlur = 5; g.fill(); g.restore();
     dark(card.stage || 'BASE', 98, 58, 21, { font: 'BlackItalic', align: 'center' });
-    const nm = darkTitle(card.name, 44, 128, card.nameSize || 58);
-    if (card.suffix) darkTitle(card.suffix, 44 + nm.w + 12, 128, (card.nameSize || 58) * 0.8, { font: 'BlackItalic' });
+    let ns = card.nameSize || 58; g.font = ns + 'px Black';
+    while (g.measureText(card.name + (card.suffix ? '  ' + card.suffix : '')).width > 560 && ns > 36) { ns--; g.font = ns + 'px Black'; }
+    const nm = darkTitle(card.name, 44, 128, ns);
+    if (card.suffix) darkTitle(card.suffix, 44 + nm.w + 12, 128, ns * 0.8, { font: 'BlackItalic' });
     energy(card.type, 856, 92, 34);
-    const hpm = darkTitle(String(card.hp), 808, 114, 62, { align: 'right' });
-    darkTitle('PV', 808 - hpm.w - 6, 110, 22, { align: 'right' });
+    if (card.type2) energy(card.type2, 822, 118, 17);
+    const hpR = card.type2 ? 796 : 808;
+    const hpm = darkTitle(String(card.hp), hpR, 114, 62, { align: 'right' });
+    darkTitle('PV', hpR - hpm.w - 6, 110, 22, { align: 'right' });
 
     // 4) Fenêtre d'illustration
     const wx = 52, wy = 150, ww = W - 104, wh = card.windowH || 570;

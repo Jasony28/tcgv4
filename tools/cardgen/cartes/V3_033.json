@@ -1,0 +1,34 @@
+{
+  "name": "Hydre Éther-Noir",
+  "suffix": "EX",
+  "city": "Terres Sauvages Corrompues",
+  "set": "V3",
+  "stage": "BASE",
+  "attacks": [
+    {
+      "name": "Souffle du Cataclysme",
+      "damage": 250,
+      "cost": [
+        "Ombre",
+        "Ombre",
+        "Dragon",
+        "incolore"
+      ],
+      "text": "Défaussez les 3 premières cartes de votre deck."
+    }
+  ],
+  "rarity": "Légendaire",
+  "type": "Ombre",
+  "type2": "Dragon",
+  "hp": 300,
+  "ability": {
+    "name": "Régénération Maudite",
+    "text": "Au début de votre tour, soignez 30 PV à cette carte."
+  },
+  "flavor": "L'incarnation de la forêt corrompue. Ses trois têtes crachent un éther noir capable de dissoudre la pierre et le métal.",
+  "weakness": "Lumière",
+  "retreat": 3,
+  "number": "033/035",
+  "id": "V3_033",
+  "art": "C:/Users/jason/Desktop/Cartev3/Hydre Éther-Noir EX.jpg"
+}

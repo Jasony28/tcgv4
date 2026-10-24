@@ -24,15 +24,26 @@ const TYPES = {
     psy:      { a: '#f0c4ff', b: '#9b45c9', ink: '#fff', glow: '#d27cff', glyph: 'eye' },
     combat:   { a: '#f2c79a', b: '#b8612d', ink: '#fff', glow: '#ff9a52', glyph: 'fist' },
     tenebres: { a: '#9aa6b5', b: '#2b3644', ink: '#fff', glow: '#8aa0ff', glyph: 'moon' },
-    incolore: { a: '#ffffff', b: '#c9ced4', ink: '#5a5f66', glow: '#ffffff', glyph: 'star' }
+    incolore: { a: '#ffffff', b: '#c9ced4', ink: '#5a5f66', glow: '#ffffff', glyph: 'star' },
+    acier:    { a: '#e3e8ee', b: '#6b7886', ink: '#1f2933', glow: '#cfe3ff', glyph: 'gear' },
+    plasma:   { a: '#ffc2f7', b: '#c026d3', ink: '#fff', glow: '#ff5cf0', glyph: 'orbit' },
+    vent:     { a: '#d9fff4', b: '#2fae8c', ink: '#fff', glow: '#7dffe0', glyph: 'swirl' },
+    cristal:  { a: '#e6f9ff', b: '#3fa7d6', ink: '#fff', glow: '#a8ecff', glyph: 'diamond' },
+    roche:    { a: '#ecd9b5', b: '#8a6a3d', ink: '#fff', glow: '#e0b070', glyph: 'rock' },
+    abysses:  { a: '#86d8ee', b: '#123a6b', ink: '#fff', glow: '#3ad0ff', glyph: 'wave' },
+    dragon:   { a: '#f2d27a', b: '#5a3fa0', ink: '#fff', glow: '#b08cff', glyph: 'fang' },
+    glace:    { a: '#f0fdff', b: '#6fbfe3', ink: '#fff', glow: '#c9f4ff', glyph: 'snow' },
+    lumiere:  { a: '#fffbe0', b: '#eab308', ink: '#5a3d00', glow: '#fff2a0', glyph: 'sun' }
 };
+const ALIASES = { electrique: 'foudre', ombre: 'tenebres', normal: 'incolore' };
+export const typeKey = (t) => { const k = String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); return ALIASES[k] || k; };
 const FRAMES = { // couleur du cadre selon la rareté
     'Commune':    ['#f2f4f6', '#9ea6ae', '#e9edf0', '#7d858d', '#d9dde1'],
     'Rare':       ['#e6f3ff', '#6f9ccc', '#dceeff', '#4c77a8', '#cfe6ff'],
     'epique':     ['#f6e6ff', '#9d6cc9', '#f0dcff', '#6f3f9c', '#e6ccff'],
     'Légendaire': ['#fff5cc', '#c99a2e', '#ffeaa0', '#8f6512', '#f7d978']
 };
-const T = TYPES[card.type] || TYPES.incolore;
+const T = TYPES[typeKey(card.type)] || TYPES.incolore;
 const FR = FRAMES[card.rarity] || FRAMES['Légendaire'];
 
 // Hasard déterministe (même carte = même rendu)
@@ -59,12 +70,21 @@ function glyph(kind, x, y, r, ink) {
     else if (kind === 'flame') { g.moveTo(0, -r * 0.76); g.bezierCurveTo(r * 0.72, -r * 0.1, r * 0.56, r * 0.7, 0, r * 0.7); g.bezierCurveTo(-r * 0.56, r * 0.7, -r * 0.62, 0, -r * 0.1, -r * 0.26); g.bezierCurveTo(-r * 0.04, -r * 0.04, r * 0.06, -r * 0.42, 0, -r * 0.76); g.fill(); }
     else if (kind === 'leaf') { g.moveTo(-r * 0.56, r * 0.56); g.bezierCurveTo(-r * 0.6, -r * 0.4, r * 0.2, -r * 0.7, r * 0.62, -r * 0.62); g.bezierCurveTo(r * 0.6, r * 0.1, r * 0.1, r * 0.6, -r * 0.56, r * 0.56); g.fill(); }
     else if (kind === 'eye') { g.ellipse(0, 0, r * 0.66, r * 0.4, 0, 0, 7); g.fill(); g.globalCompositeOperation = 'destination-out'; g.beginPath(); g.arc(0, 0, r * 0.2, 0, 7); g.fill(); }
-    else if (kind === 'fist') { rr(-r * 0.5, -r * 0.4, r, r * 0.8, r * 0.22); g.fill(); }
+    else if (kind === 'fist') { for (let i = 0; i < 16; i++) { const q = i % 2 ? r * 0.32 : r * 0.72, a = -Math.PI / 2 + i * Math.PI / 8; g.lineTo(Math.cos(a) * q, Math.sin(a) * q); } g.closePath(); g.fill(); }
+    else if (kind === 'gear') { g.arc(0, 0, r * 0.42, 0, 7); g.fill(); for (let i = 0; i < 8; i++) { g.save(); g.rotate(i * Math.PI / 4); g.fillRect(-r * 0.11, -r * 0.66, r * 0.22, r * 0.3); g.restore(); } g.globalCompositeOperation = 'destination-out'; g.beginPath(); g.arc(0, 0, r * 0.17, 0, 7); g.fill(); }
+    else if (kind === 'orbit') { g.lineWidth = r * 0.12; g.save(); g.rotate(-0.5); g.beginPath(); g.ellipse(0, 0, r * 0.68, r * 0.28, 0, 0, 7); g.stroke(); g.rotate(1); g.beginPath(); g.ellipse(0, 0, r * 0.68, r * 0.28, 0, 0, 7); g.stroke(); g.restore(); g.beginPath(); g.arc(0, 0, r * 0.18, 0, 7); g.fill(); }
+    else if (kind === 'swirl') { g.lineWidth = r * 0.14; g.lineCap = 'round'; [[-0.3, 0.42], [0, 0.3], [0.28, 0.2]].forEach(([yy, k]) => { g.beginPath(); g.moveTo(-r * 0.62, yy * r); g.bezierCurveTo(-r * 0.1, yy * r - r * k, r * 0.4, yy * r + r * k, r * 0.62, yy * r - r * 0.1); g.stroke(); }); }
+    else if (kind === 'diamond') poly([[0, -0.72], [0.5, -0.12], [0, 0.72], [-0.5, -0.12]]);
+    else if (kind === 'rock') poly([[-0.6, 0.45], [-0.42, -0.2], [-0.1, -0.55], [0.35, -0.45], [0.62, 0.05], [0.45, 0.5]]);
+    else if (kind === 'wave') { g.lineWidth = r * 0.14; g.lineCap = 'round'; [-0.25, 0.2].forEach(yy => { g.beginPath(); for (let i = 0; i <= 20; i++) { const xx = -0.62 + i * 0.062; const fy = yy + Math.sin(i / 20 * Math.PI * 2) * 0.16; i ? g.lineTo(xx * r, fy * r) : g.moveTo(xx * r, fy * r); } g.stroke(); }); }
+    else if (kind === 'fang') poly([[-0.55, -0.6], [0.55, -0.6], [0.18, 0.72], [0, 0.1], [-0.18, 0.72]]);
+    else if (kind === 'snow') { g.lineWidth = r * 0.13; g.lineCap = 'round'; for (let i = 0; i < 3; i++) { g.save(); g.rotate(i * Math.PI / 3); g.beginPath(); g.moveTo(0, -r * 0.68); g.lineTo(0, r * 0.68); g.stroke(); g.restore(); } }
+    else if (kind === 'sun') { g.arc(0, 0, r * 0.34, 0, 7); g.fill(); for (let i = 0; i < 8; i++) { g.save(); g.rotate(i * Math.PI / 4); g.fillRect(-r * 0.07, -r * 0.72, r * 0.14, r * 0.24); g.restore(); } }
     else if (kind === 'pin') { g.arc(0, -r * 0.25, r * 0.45, Math.PI, 0); g.lineTo(0, r * 0.75); g.closePath(); g.fill(); g.globalCompositeOperation = 'destination-out'; g.beginPath(); g.arc(0, -r * 0.25, r * 0.18, 0, 7); g.fill(); }
     g.restore();
 }
 function energy(type, x, y, r, glow = false) {
-    const t = TYPES[type] || TYPES.incolore;
+    const t = TYPES[typeKey(type)] || TYPES.incolore;
     g.save();
     if (glow) { g.shadowColor = t.glow; g.shadowBlur = r * 0.9; }
     else { g.shadowColor = 'rgba(0,0,0,.55)'; g.shadowBlur = 6; g.shadowOffsetY = 2; }
@@ -194,16 +214,20 @@ g.fillStyle = metal(40, 36, 178, 70); g.shadowColor = 'rgba(0,0,0,.5)'; g.shadow
 g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 1.5; g.shadowColor = 'transparent'; g.stroke(); g.restore();
 text(card.stage || 'BASE', 102, 62, 23, { font: 'BlackItalic', color: '#2a2108', align: 'center', shadow: false });
 
-// nom + suffixe
-const nameSize = card.nameSize || 70;
+// nom + suffixe (rétréci pour ne pas toucher les PV)
+let nameSize = card.nameSize || 70;
+const nameW = (sz) => { g.font = sz + 'px Black'; let w = g.measureText(card.name).width; if (card.suffix) { g.font = (sz * 0.82) + 'px BlackItalic'; w += 14 + g.measureText(card.suffix).width; } return w; };
+while (nameW(nameSize) > 540 && nameSize > 40) nameSize--;
 const nm = title(card.name, 44, 146, nameSize);
 if (card.suffix) title(card.suffix, 44 + nm.w + 14, 146, nameSize * 0.82, { font: 'BlackItalic', fill: ['#fffbe6', T.a, T.b], stroke: '#140f02' });
 
 // PV + type
 const hp = String(card.hp);
 energy(card.type, 852, 90, 40, true);
-const hpm = title(hp, 800, 112, 74, { align: 'right', glow: null });
-title('PV', 800 - hpm.w - 8, 108, 26, { align: 'right', glow: null, font: 'Black' });
+if (card.type2) energy(card.type2, 812, 122, 20, true);
+const hpR = card.type2 ? 784 : 800;
+const hpm = title(hp, hpR, 112, 74, { align: 'right', glow: null });
+title('PV', hpR - hpm.w - 8, 108, 26, { align: 'right', glow: null, font: 'Black' });
 
 // sous-titre : ville
 g.save(); g.font = '24px SemiItalic'; const cityW = g.measureText(card.city).width; g.restore();
@@ -262,7 +286,13 @@ for (const [label, draw] of chips) {
 }
 
 // ===================== RÈGLE + PIED =====================
-if (LEG || card.ruleText) text(card.ruleText || "Règle Légendaire : quand cette carte est mise K.O., l'adversaire récupère 2 cartes Récompense.",
+if (card.flavor) {
+    g.font = '19px SemiItalic'; const ls = []; let l = '';
+    for (const w of card.flavor.split(' ')) { const tt = l ? l + ' ' + w : w; if (g.measureText(tt).width > W - 120 && l) { ls.push(l); l = w; } else l = tt; }
+    ls.push(l);
+    ls.slice(0, 2).forEach((s, i) => text(s, W / 2, (ls.length > 1 ? 1192 : 1204) + i * 23, 19, { font: 'SemiItalic', align: 'center', color: '#eef2f8' }));
+}
+else if (card.ruleText) text(card.ruleText || "Règle Légendaire : quand cette carte est mise K.O., l'adversaire récupère 2 cartes Récompense.",
     W / 2, 1200, 18, { font: 'SemiItalic', align: 'center', color: '#e9eef5' });
 
 // gauche : illustrateur
