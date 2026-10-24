@@ -1,8 +1,9 @@
 // Fichier: booster-draws.js — contenu des boosters (réglages de l'économie)
 import { allCards } from './cards.js';
 
-// Nombre de boosters gratuits par jour (page Booster)
-export const DAILY_BOOSTER_LIMIT = 3;
+// Boosters gratuits par jour (page Booster) : chaque collection a son propre compteur
+export const DAILY_BOOSTER_LIMIT = 3;     // boosters V1
+export const DAILY_V2_BOOSTER_LIMIT = 2;  // boosters V2
 
 // Chance que la 5e carte d'un booster soit une légendaire, selon le type de booster.
 // La V2 a 6 légendaires sur 11 cartes : à 10 %, finir l'album prenait plus de 2 mois.

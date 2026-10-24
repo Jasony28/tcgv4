@@ -7,7 +7,8 @@ import { updateQuestProgress } from './quest-manager.js';
 import { updateUserStats } from './stats-manager.js';
 import { showToast } from './toast.js';
 import { getDayKey } from './daily-utils.js';
-import { DAILY_BOOSTER_LIMIT, LEGENDARY_CHANCE, drawClassicBoosterCards, drawLegendaryBoosterCards } from './booster-draws.js';
+import { playBoosterOpening } from './booster-animation.js';
+import { DAILY_BOOSTER_LIMIT, DAILY_V2_BOOSTER_LIMIT, LEGENDARY_CHANCE, drawClassicBoosterCards, drawLegendaryBoosterCards } from './booster-draws.js';
 
 // --- Éléments du DOM ---
 const boosterStatusEl = document.getElementById('booster-status');
@@ -69,14 +70,33 @@ function displayAvailableBoosters() {
 
     if (boostersOpened < DAILY_BOOSTER_LIMIT) {
         const remaining = DAILY_BOOSTER_LIMIT - boostersOpened;
-        boosterStatusEl.textContent = `Boosters quotidiens restants : ${remaining}/${DAILY_BOOSTER_LIMIT}`;
+        boosterStatusEl.textContent = `Boosters V1 du jour : ${remaining}/${DAILY_BOOSTER_LIMIT}`;
         newDaily.style.opacity = 1;
         newDaily.style.cursor = 'pointer';
         newDaily.addEventListener('click', () => handleOpenBooster('daily'), { once: true });
     } else {
-        boosterStatusEl.textContent = "Boosters quotidiens épuisés. Revenez demain !";
+        boosterStatusEl.textContent = "Boosters V1 du jour épuisés. Revenez demain !";
         newDaily.style.opacity = 0.5;
         newDaily.style.cursor = 'not-allowed';
+    }
+
+    // --- DAILY V2 (compteur séparé) ---
+    const v2Opened = userData.dailyV2BoosterOpenedCount || 0;
+    document.getElementById('daily-v2-booster-area').style.display = 'block';
+    const v2StatusEl = document.getElementById('booster-v2-status');
+    const oldDailyV2 = document.getElementById('booster-v2-pack-image');
+    const newDailyV2 = oldDailyV2.cloneNode(true);
+    oldDailyV2.parentNode.replaceChild(newDailyV2, oldDailyV2);
+
+    if (v2Opened < DAILY_V2_BOOSTER_LIMIT) {
+        v2StatusEl.textContent = `Boosters V2 du jour : ${DAILY_V2_BOOSTER_LIMIT - v2Opened}/${DAILY_V2_BOOSTER_LIMIT}`;
+        newDailyV2.style.opacity = 1;
+        newDailyV2.style.cursor = 'pointer';
+        newDailyV2.addEventListener('click', () => handleOpenBooster('daily_v2'), { once: true });
+    } else {
+        v2StatusEl.textContent = "Boosters V2 du jour épuisés. Revenez demain !";
+        newDailyV2.style.opacity = 0.5;
+        newDailyV2.style.cursor = 'not-allowed';
     }
 
     // --- CLASSIC ---
@@ -143,11 +163,10 @@ function displayAvailableBoosters() {
 
 async function openBooster(boosterType) {
     if (!userData) return;
-    boosterSelectionContainer.style.display = 'none';
-    cardRevealArea.style.display = 'grid';
 
     let drawnCards;
-    const drawBoosterType = (boosterType === 'daily') ? 'classic' : boosterType;
+    // Boosters gratuits du jour : V1 (contenu classique) et V2 (contenu V2), chacun son compteur
+    const drawBoosterType = { daily: 'classic', daily_v2: 'v2' }[boosterType] || boosterType;
 
     if (drawBoosterType === 'legendary') {
         drawnCards = drawLegendaryBoosterCards();
@@ -171,11 +190,15 @@ async function openBooster(boosterType) {
     // pas des cartes qui n'ont pas été ajoutées à la collection.
     await updateUserAfterBoosterOpen(boosterType, drawnCards);
 
-    startProgressiveReveal(drawnCards, isNew);
-
-    // Quêtes et stats en arrière-plan : la révélation n'attend pas
-    updateQuestsAfterBoosterOpen(boosterType, drawnCards);
+    // Quêtes et stats en arrière-plan : l'animation n'attend pas
+    updateQuestsAfterBoosterOpen(drawBoosterType, drawnCards);
     updateUserStats(userData.uid, { boostersOpened: 1 });
+
+    // Mise en scène de l'ouverture (booster-animation.js), puis retour à la sélection
+    await playBoosterOpening({ cards: drawnCards, isNew, boosterType });
+    const updatedUserDoc = await getDoc(doc(db, "users", userData.uid));
+    userData = { uid: userData.uid, ...updatedUserDoc.data() };
+    displayAvailableBoosters();
 }
 
 async function updateQuestsAfterBoosterOpen(boosterType, drawnCards) {
@@ -184,79 +207,9 @@ async function updateQuestsAfterBoosterOpen(boosterType, drawnCards) {
     if (boosterType === 'legendary') {
         await updateQuestProgress('open_legendary_booster');
     }
-}
-
-const rarityClass = (rarity) => `rarity-${rarity.replace(/é/g, 'e')}`;
-
-// Récapitulatif du booster (les 5 cartes d'un coup)
-function showBoosterRecap(cards, isNew, onContinue) {
-    revealStatusEl.textContent = 'Booster terminé !';
-    cardRevealArea.classList.add('recap');
-    cardRevealArea.innerHTML = `
-        <div class="recap-grid">
-            ${cards.map((card, i) => `
-                <div class="card ${rarityClass(card.rarity)}">
-                    <img class="card-image" src="${card.image}" alt="${card.name}">
-                    ${isNew[i] ? '<span class="new-ribbon">Nouvelle</span>' : ''}
-                </div>`).join('')}
-        </div>
-        <button id="recap-continue" class="recap-button">Continuer</button>
-    `;
-    document.getElementById('recap-continue').addEventListener('click', onContinue, { once: true });
-}
-
-function startProgressiveReveal(cards, isNew = []) {
-    let currentCardIndex = 0;
-    let isClickable = true;
-
-    revealStatusEl.style.display = 'block';
-    revealStatusEl.textContent = `Touche la carte pour révéler la suivante (1/${cards.length})`;
-    cardRevealArea.classList.remove('recap');
-    cardRevealArea.innerHTML = '<div id="reveal-slot" class="card" style="cursor: pointer;"></div>';
-    const revealSlot = document.getElementById('reveal-slot');
-
-    const displayCard = (card, index) => {
-        revealSlot.innerHTML = `<img src="${card.image}" alt="${card.name}" class="card-image">`
-            + (isNew[index] ? '<span class="new-ribbon big">Nouvelle !</span>' : '');
-        revealSlot.className = `card ${rarityClass(card.rarity)}`;
-    };
-
-    const returnToBoosterSelection = async () => {
-        revealSlot.removeEventListener('click', revealNextCardHandler);
-
-        showBoosterRecap(cards, isNew, async () => {
-            cardRevealArea.style.display = 'none';
-            cardRevealArea.classList.remove('recap');
-            revealStatusEl.style.display = 'none';
-            boosterSelectionContainer.style.display = 'flex';
-
-            const userDocRef = doc(db, "users", userData.uid);
-            const updatedUserDoc = await getDoc(userDocRef);
-            userData = { uid: userData.uid, ...updatedUserDoc.data() };
-
-            displayAvailableBoosters();
-        });
-    };
-
-    const revealNextCardHandler = () => {
-        if (!isClickable) return;
-        isClickable = false;
-        currentCardIndex++;
-
-        if (currentCardIndex < cards.length) {
-            displayCard(cards[currentCardIndex], currentCardIndex);
-            revealStatusEl.textContent = currentCardIndex === cards.length - 1
-                ? 'Dernière carte ! Touche-la pour voir le récap.'
-                : `Touche la carte pour révéler la suivante (${currentCardIndex + 1}/${cards.length})`;
-        } else {
-            returnToBoosterSelection();
-        }
-
-        setTimeout(() => { isClickable = true; }, 250);
-    };
-
-    displayCard(cards[currentCardIndex], currentCardIndex);
-    revealSlot.addEventListener('click', revealNextCardHandler);
+    if (boosterType === 'v2') {
+        await updateQuestProgress('open_v2_booster');
+    }
 }
 
 async function checkAndResetDailyCounter() {
@@ -267,9 +220,11 @@ async function checkAndResetDailyCounter() {
         const userDocRef = doc(db, "users", userData.uid);
         await updateDoc(userDocRef, {
             dailyBoosterOpenedCount: 0,
+            dailyV2BoosterOpenedCount: 0,
             dailyLastReset: Timestamp.now()
         });
         userData.dailyBoosterOpenedCount = 0;
+        userData.dailyV2BoosterOpenedCount = 0;
     }
 }
 
@@ -317,6 +272,9 @@ async function updateUserAfterBoosterOpen(boosterType, drawnCards) {
                 // Vérification côté transaction : empêche de dépasser la limite (autre onglet, double clic...)
                 if ((currentData.dailyBoosterOpenedCount || 0) >= DAILY_BOOSTER_LIMIT) throw new Error("Boosters quotidiens épuisés. Revenez demain !");
                 updates.dailyBoosterOpenedCount = increment(1);
+            } else if (boosterType === 'daily_v2') {
+                if ((currentData.dailyV2BoosterOpenedCount || 0) >= DAILY_V2_BOOSTER_LIMIT) throw new Error("Boosters V2 du jour épuisés. Revenez demain !");
+                updates.dailyV2BoosterOpenedCount = increment(1);
             } else if (boosterType === 'classic') {
                 if ((currentData.boosterInventory?.classic || 0) < 1) throw new Error("Pas de booster classique à ouvrir.");
                 updates['boosterInventory.classic'] = increment(-1);
