@@ -1,6 +1,6 @@
 // Fichier: auth-manager.js (Version centralisée et finale)
 import { onAuthStateChanged, signOut, getAuth } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
-import { doc, getDoc, onSnapshot, updateDoc, serverTimestamp, collection, query, where } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+import { doc, getDoc, onSnapshot, updateDoc, serverTimestamp, collection, query, where, arrayRemove } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
 import { updateQuestProgress } from './quest-manager.js';
 import { getAchievementsStatus } from './achievements-config.js';
@@ -36,6 +36,19 @@ function notifyOnce(key, ids) {
         try { localStorage.setItem(key, JSON.stringify([...notified, ...fresh])); } catch { /* ignoré */ }
     }
     return fresh;
+}
+
+/**
+ * Cadeaux envoyés à tous les joueurs (GitHub Actions → « Cadeau à tous les joueurs ») :
+ * les objets sont déjà dans le compte, on affiche le message une fois puis on vide la boîte.
+ */
+const shownGifts = new Set();
+function showGifts(uid, userData) {
+    const fresh = (userData.giftInbox || []).filter(g => g?.id && !shownGifts.has(g.id));
+    if (!fresh.length) return;
+    fresh.forEach(g => shownGifts.add(g.id));
+    for (const g of fresh) showToast('success', `🎁 Cadeau reçu : ${g.message} (${g.text})`, 8000);
+    updateDoc(doc(db, "users", uid), { giftInbox: arrayRemove(...fresh) }).catch(() => { /* réessayé à la prochaine page */ });
 }
 
 /** Hors de la page profil : prévient quand un ami propose un échange. */
@@ -105,6 +118,7 @@ function listenToUserData(uid) {
         if (doc.exists()) {
             updateHeaderUI(doc.data());
             checkAchievements(uid, doc.data());
+            showGifts(uid, doc.data());
         }
     });
 }

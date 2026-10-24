@@ -1,0 +1,64 @@
+# Cadeau à TOUS les joueurs, même déconnectés.
+# GitHub → onglet Actions → « Cadeau à tous les joueurs » → Run workflow → remplir → Run workflow.
+# Seuls les propriétaires du dépôt peuvent le lancer. Coche « Mode test » pour vérifier sans rien donner.
+name: Cadeau à tous les joueurs
+
+on:
+  workflow_dispatch:
+    inputs:
+      message:
+        description: "Message affiché aux joueurs"
+        default: "Cadeau de l'équipe JWBnDr !"
+        required: true
+      coins:
+        description: "Pièces (ex : 100, ou 0)"
+        default: "0"
+        required: false
+      boosters:
+        description: "Boosters (ex : v3:2, v2:1) — types : classic, legendary, v2, v3"
+        default: ""
+        required: false
+      displays:
+        description: "Displays (ex : v3:1) — types : classic, v2, v3, legendary"
+        default: ""
+        required: false
+      cards:
+        description: "Cartes (ex : V3_010:1, V3_021:1)"
+        default: ""
+        required: false
+      dry_run:
+        description: "Mode test (affiche ce qui serait donné, sans rien donner)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: give-items
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  give:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+      - name: Installer les dépendances
+        run: npm ci
+        working-directory: scripts
+      - name: Donner le cadeau
+        run: node scripts/give-items.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          GIFT_MESSAGE: ${{ inputs.message }}
+          GIFT_COINS: ${{ inputs.coins }}
+          GIFT_BOOSTERS: ${{ inputs.boosters }}
+          GIFT_DISPLAYS: ${{ inputs.displays }}
+          GIFT_CARDS: ${{ inputs.cards }}
+          GIFT_DRY_RUN: ${{ inputs.dry_run }}
