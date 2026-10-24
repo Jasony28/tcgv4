@@ -7,7 +7,8 @@
 // [singulier, pluriel]
 export const BOOSTER_NAMES = {
     classic: ['Booster Classique', 'Boosters Classiques'], legendary: ['Booster Légendaire', 'Boosters Légendaires'],
-    v2: ['Booster V2', 'Boosters V2'], v3: ['Booster V3', 'Boosters V3']
+    v2: ['Booster V2', 'Boosters V2'], v3: ['Booster V3', 'Boosters V3'],
+    v3_legendary: ['Booster Légendaire V3', 'Boosters Légendaires V3']
 };
 export const DISPLAY_NAMES = {
     classic: ['Display Classique', 'Displays Classiques'], v2: ['Display V2', 'Displays V2'],

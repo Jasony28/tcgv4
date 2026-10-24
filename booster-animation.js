@@ -8,7 +8,7 @@
 const RARITY_ORDER = ['Commune', 'Rare', 'epique', 'Légendaire'];
 const RARITY_LABEL = { 'Commune': 'Commune', 'Rare': 'Rare', 'epique': 'Épique', 'Légendaire': 'Légendaire' };
 const rarityKey = (r) => r.replace(/é/g, 'e'); // classe CSS : Commune, Rare, epique, Legendaire
-const PACK_CLASS = { classic: '', daily: '', v2: 'v2', daily_v2: 'v2', v3: 'v3', legendary: 'legendary' };
+const PACK_CLASS = { classic: '', daily: '', v2: 'v2', daily_v2: 'v2', v3: 'v3', legendary: 'legendary', v3_legendary: 'legendary' };
 
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
 const vibrate = (pattern) => { try { navigator.vibrate?.(pattern); } catch { /* pas de vibreur */ } };

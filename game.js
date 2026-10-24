@@ -168,6 +168,18 @@ function displayAvailableBoosters() {
         v3Area.style.display = 'none';
     }
 
+    // --- LÉGENDAIRE V3 (récompense du Pass) ---
+    const v3LegBoosters = userData.boosterInventory?.v3_legendary || 0;
+    const v3LegArea = document.getElementById('v3_legendary-booster-area');
+    const oldV3Leg = document.getElementById('v3_legendary-booster-opener');
+    const newV3Leg = oldV3Leg.cloneNode(true);
+    oldV3Leg.parentNode.replaceChild(newV3Leg, oldV3Leg);
+    v3LegArea.style.display = v3LegBoosters > 0 ? 'block' : 'none';
+    if (v3LegBoosters > 0) {
+        newV3Leg.querySelector('#v3_legendary-booster-count').textContent = `x${v3LegBoosters}`;
+        newV3Leg.addEventListener('click', () => handleOpenBooster('v3_legendary'), { once: true });
+    }
+
     // --- Séries : plus de boosters gratuits pour une série terminée ---
     const v2Active = isBoosterProduced('v2');
     if (!mainType) dailyBoosterArea.style.display = 'none';
@@ -182,7 +194,7 @@ function displayAvailableBoosters() {
     keepV2.onclick = () => handleKeepDaily('v2');
 
     // --- Badges de série sur l'inventaire (série terminée = objet de collection) ---
-    for (const [type, areaId] of [['classic', 'classic-booster-area'], ['legendary', 'legendary-booster-area'], ['v2', 'v2-booster-area'], ['v3', 'v3-booster-area']]) {
+    for (const [type, areaId] of [['classic', 'classic-booster-area'], ['legendary', 'legendary-booster-area'], ['v2', 'v2-booster-area'], ['v3', 'v3-booster-area'], ['v3_legendary', 'v3_legendary-booster-area']]) {
         const area = document.getElementById(areaId);
         area.querySelector('.series-badge')?.remove();
         const badge = seriesBadgeHTML(seriesOfBooster(type));
@@ -207,7 +219,7 @@ function displayAvailableBoosters() {
     displayBox.querySelectorAll('[data-display]').forEach(btn => { btn.onclick = () => handleOpenDisplay(btn.dataset.display); });
 
     // --- Inventaire vide ? ---
-    const boosterTotal = ['classic', 'legendary', 'v2', ...(V3_RELEASED ? ['v3'] : [])]
+    const boosterTotal = ['classic', 'legendary', 'v2', ...(V3_RELEASED ? ['v3', 'v3_legendary'] : [])]
         .reduce((sum, t) => sum + (userData.boosterInventory?.[t] || 0), 0);
     document.getElementById('inventory-empty').hidden = boosterTotal + displays.length > 0;
 
@@ -283,6 +295,8 @@ async function openBooster(boosterType) {
 
     if (drawBoosterType === 'legendary') {
         drawnCards = drawLegendaryBoosterCards();
+    } else if (drawBoosterType === 'v3_legendary') {
+        drawnCards = drawLegendaryBoosterCards(allCardsV3Released);
     } else if (drawBoosterType === 'v3') {
         drawnCards = drawClassicBoosterCards(allCardsV3Released, LEGENDARY_CHANCE.v3);
     } else if (drawBoosterType === 'v2') {
@@ -323,9 +337,14 @@ async function updateQuestsAfterBoosterOpen(boosterType, drawnCards) {
     if (boosterType === 'v2') {
         await updateQuestProgress('open_v2_booster');
     }
-    if (boosterType === 'v3') {
+    if (boosterType === 'v3' || boosterType === 'v3_legendary') {
         await updateQuestProgress('open_v3_booster');
     }
+    // Cartes V3 rares ou mieux (quêtes V3)
+    const v3Good = drawnCards.filter(c => c.version === 'v3' && c.rarity !== 'Commune').length;
+    if (v3Good) await updateQuestProgress('pull_v3_rare_plus', v3Good);
+    const v3Top = drawnCards.filter(c => c.version === 'v3' && (c.rarity === 'epique' || c.rarity === 'Légendaire')).length;
+    if (v3Top) await updateQuestProgress('pull_v3_epic_plus', v3Top);
 }
 
 async function checkAndResetDailyCounter() {
@@ -405,6 +424,9 @@ async function updateUserAfterBoosterOpen(boosterType, drawnCards) {
                 if (!V3_RELEASED) throw new Error("La collection V3 n'est pas encore sortie.");
                 if ((currentData.boosterInventory?.v3 || 0) < 1) throw new Error("Pas de booster V3 à ouvrir.");
                 updates['boosterInventory.v3'] = increment(-1);
+            } else if (boosterType === 'v3_legendary') {
+                if ((currentData.boosterInventory?.v3_legendary || 0) < 1) throw new Error("Pas de booster légendaire V3 à ouvrir.");
+                updates['boosterInventory.v3_legendary'] = increment(-1);
             } else if (boosterType === 'v2') {
                 if ((currentData.boosterInventory?.v2 || 0) < 1) throw new Error("Pas de booster V2 à ouvrir.");
                 updates['boosterInventory.v2'] = increment(-1);

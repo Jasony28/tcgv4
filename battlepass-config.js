@@ -17,26 +17,35 @@ function getRewardForStep(step) {
             reward.description = 'Booster V3';
             break;
         case 7:
-            reward.type = 'v2_booster';
+            reward.type = 'v3_booster';
             reward.value = 1;
-            reward.description = 'Booster V2';
+            reward.description = 'Booster V3';
             break;
         case 5:
             reward.type = 'random_card';
             reward.rarity = 'Rare';
+            reward.version = 'v3';
             reward.value = 1;
-            reward.description = 'Carte Rare';
+            reward.description = 'Carte Rare V3';
             break;
         case 9:
             reward.type = 'random_card';
             reward.rarity = 'epique';
+            reward.version = 'v3';
             reward.value = 1;
-            reward.description = 'Carte Épique';
+            reward.description = 'Carte Épique V3';
             break;
         case 10:
-            reward.type = 'v3_booster';
-            reward.value = 3;
-            reward.description = '3 Boosters V3';
+            // Dernier palier : le Booster Légendaire V3 (une légendaire V3 garantie)
+            if (step === MAX_LEVEL) {
+                reward.type = 'v3_legendary_booster';
+                reward.value = 1;
+                reward.description = 'Booster Légendaire V3';
+            } else {
+                reward.type = 'v3_booster';
+                reward.value = 2;
+                reward.description = '2 Boosters V3';
+            }
             break;
         default:
             reward.type = 'coins';
@@ -55,6 +64,7 @@ export const REWARD_ICONS = {
     v2_booster: '💠',
     legendary_booster: '🌟',
     v3_booster: '✨',
+    v3_legendary_booster: '👑',
     random_card: '🃏'
 };
 
@@ -70,7 +80,9 @@ export const questsConfig = {
     q13: { description: "Obtenir 10 cartes différentes en 24h", target: 10, actionType: 'obtain_10_diff_cards_24h', xp: 200, coins: 40 },
     q14: { description: "Se connecter 5 jours d'affilée", target: 5, actionType: 'daily_login_streak', xp: 300, coins: 60 },
     q15: { description: "Ouvrir 15 boosters", target: 15, actionType: 'open_booster', xp: 200, coins: 40 },
-    q16: { description: "Acheter 5 articles à la boutique", target: 5, actionType: 'shop_buy', xp: 200, coins: 40 }
+    q16: { description: "Acheter 5 articles à la boutique", target: 5, actionType: 'shop_buy', xp: 200, coins: 40 },
+    q17: { description: "Obtenir 3 cartes V3 épiques ou légendaires", target: 3, actionType: 'pull_v3_epic_plus', xp: 200, coins: 40 },
+    q18: { description: "Obtenir 15 cartes V3 rares ou mieux", target: 15, actionType: 'pull_v3_rare_plus', xp: 200, coins: 30 }
 };
 
 // === QUÊTES DU JOUR (changent tous les jours à 00h) ===
@@ -81,6 +93,8 @@ export const dailyQuestPool = {
     d_open3: { description: "Ouvrir 3 boosters", target: 3, actionType: 'open_booster', xp: 80, coins: 10 },
     d_open5: { description: "Ouvrir 4 boosters", target: 4, actionType: 'open_booster', xp: 110, coins: 15 },
     d_v3: { description: "Ouvrir 1 booster V3", target: 1, actionType: 'open_v3_booster', xp: 70, coins: 10 },
+    d_v3_open3: { description: "Ouvrir 3 boosters V3", target: 3, actionType: 'open_v3_booster', xp: 100, coins: 15 },
+    d_v3_rare: { description: "Obtenir 2 cartes V3 rares ou mieux", target: 2, actionType: 'pull_v3_rare_plus', xp: 80, coins: 10 },
     d_shop: { description: "Acheter 1 article à la boutique", target: 1, actionType: 'shop_buy', xp: 70, coins: 10 },
     d_sell: { description: "Vendre 2 cartes à la console", target: 2, actionType: 'sell_console', xp: 70, coins: 10 },
     d_bid: { description: "Placer 1 enchère au marché", target: 1, actionType: 'place_bid', xp: 90, coins: 20 },

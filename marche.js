@@ -133,7 +133,7 @@ async function initializeMarketplace() {
 }
 
 async function runFinalize() {
-    const results = await finalizeExpiredListings();
+    const results = await finalizeExpiredListings(me?.uid);
     for (const { listing, outcome } of results) {
         const item = getListingItem(listing);
         const name = describeItem(item).name;

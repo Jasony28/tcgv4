@@ -10,7 +10,7 @@ import { updateQuestProgress } from './quest-manager.js';
 import { getAchievementsStatus, rewardText, countClaimedAchievements } from './achievements-config.js';
 import { claimAchievement } from './achievements.js';
 import {
-  sendFriendRequest, acceptFriendRequest, refuseFriendRequest, removeFriend,
+  sendFriendRequest, acceptFriendRequest, refuseFriendRequest, removeFriend, friendCode, getFriendSuggestions,
   createTradeRequest, validateTrade, normalizeOffer, checkOfferAffordable
 } from './trade-service.js';
 import { getLevel } from './battlepass-config.js';
@@ -191,6 +191,7 @@ function setupFriendsFeature() {
     try {
       const res = await sendFriendRequest(globalUserData, input.value);
       input.value = '';
+      renderFriendSuggestions();
       showToast('success', res.status === 'accepted'
         ? `${res.pseudo} t'avait déjà demandé : vous êtes maintenant amis !`
         : `Demande envoyée à ${res.pseudo} !`);
@@ -206,6 +207,15 @@ function setupFriendsFeature() {
     }
   };
   addFriendBtn.onclick = submit;
+
+  // Mon code ami (à donner aux autres joueurs)
+  const myCode = friendCode(globalUserData.pseudo || '?', globalUserData.uid);
+  document.getElementById('my-friend-code').textContent = myCode;
+  document.getElementById('copy-friend-code').onclick = async () => {
+    try { await navigator.clipboard.writeText(myCode); showToast('success', 'Code ami copié !'); }
+    catch { showToast('info', `Ton code ami : ${myCode}`); }
+  };
+  renderFriendSuggestions();
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
 
   document.getElementById('friends-list-btn').onclick = () => toggleSection('friends');
@@ -219,6 +229,31 @@ function setupFriendsFeature() {
     document.getElementById('profile-coins').textContent = globalUserData.coins || 0;
     if (openSection === 'friends') refreshFriendsList();
     if (openSection === 'requests') refreshFriendRequestsList();
+  });
+}
+
+/** Suggestions d'amis (lues une fois à l'ouverture du profil, puis après chaque ajout) */
+async function renderFriendSuggestions() {
+  const box = document.getElementById('friend-suggestions');
+  let list = [];
+  try { list = await getFriendSuggestions(globalUserData, 4); } catch { /* hors ligne : pas de suggestions */ }
+  box.innerHTML = list.length ? `<p class="suggest-title">Suggestions</p>` + list.map(s => `
+    <div class="suggest-row">
+      <span><strong>${escapeHtml(s.pseudo)}</strong>${s.mutual ? ` <small>${s.mutual} ami${s.mutual > 1 ? 's' : ''} en commun</small>` : ''}</span>
+      <button class="profile-btn primary small" data-code="${escapeHtml(s.code)}">Ajouter</button>
+    </div>`).join('') : '';
+  box.querySelectorAll('[data-code]').forEach(btn => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        const res = await sendFriendRequest(globalUserData, btn.dataset.code);
+        showToast('success', res.status === 'accepted' ? `Vous êtes maintenant amis avec ${res.pseudo} !` : `Demande envoyée à ${res.pseudo} !`);
+        renderFriendSuggestions();
+      } catch (e) {
+        showToast('error', e.code === 'permission-denied' ? "Firebase a refusé la demande d'ami (règles de sécurité de la base). Préviens l'admin." : e.message, 6000);
+        btn.disabled = false;
+      }
+    };
   });
 }
 
@@ -501,7 +536,7 @@ async function refuseTradeNotif(tradeReqId) {
 
 // ----------- MODALE D'ECHANGE -----------
 
-const BOOSTER_LABELS = { classic: 'Booster Classique', v2: 'Booster V2', v3: 'Booster V3', legendary: 'Booster Légendaire' };
+const BOOSTER_LABELS = { classic: 'Booster Classique', v2: 'Booster V2', v3: 'Booster V3', legendary: 'Booster Légendaire', v3_legendary: 'Booster Légendaire V3' };
 let localBoosters = { classic: 0, v2: 0, legendary: 0 };
 
 async function openTradeUI(tradeData, tradeId) {

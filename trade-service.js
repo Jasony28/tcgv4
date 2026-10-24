@@ -5,8 +5,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
 
-export const BOOSTER_TYPES = ['classic', 'v2', 'v3', 'legendary'];
-export const EMPTY_OFFER = () => ({ cards: {}, coins: 0, boosters: { classic: 0, v2: 0, v3: 0, legendary: 0 } });
+export const BOOSTER_TYPES = ['classic', 'v2', 'v3', 'legendary', 'v3_legendary'];
+export const EMPTY_OFFER = () => ({ cards: {}, coins: 0, boosters: { classic: 0, v2: 0, v3: 0, legendary: 0, v3_legendary: 0 } });
 
 // ---------------- AMIS ----------------
 
@@ -42,11 +42,27 @@ export async function sendFriendRequest(me, rawPseudo) {
 export const normalizePseudo = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
     .toLowerCase().replace(/\s+/g, ' ').trim();
 
+/** Numéro à 4 chiffres tiré de l'identifiant du compte (toujours le même, rien à stocker) */
+export function friendTag(uid) {
+    let h = 7;
+    for (const ch of String(uid)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    return String(h % 10000).padStart(4, '0');
+}
+/** Code ami affiché et partagé : « Jason#4821 » */
+export const friendCode = (pseudo, uid) => `${pseudo}#${friendTag(uid)}`;
+
 /**
- * Trouve un joueur par pseudo : d'abord le pseudo exact, sinon sans tenir compte des majuscules,
- * accents et espaces. Si rien ne correspond, propose les pseudos proches.
+ * Trouve un joueur par code ami (« Jason#4821 ») ou par pseudo : d'abord le pseudo exact, sinon sans
+ * tenir compte des majuscules, accents et espaces. Si rien ne correspond, propose les pseudos proches.
  */
 async function findPlayerByPseudo(typed) {
+    const code = typed.match(/^(.+?)\s*#\s*(\d{4})$/);
+    if (code) {
+        const all = (await getDocs(collection(db, "users"))).docs;
+        const found = all.find(d => normalizePseudo(d.data().pseudo) === normalizePseudo(code[1]) && friendTag(d.id) === code[2]);
+        if (!found) throw new Error(`Aucun joueur avec le code « ${typed} ». Vérifie le pseudo et les 4 chiffres.`);
+        return found;
+    }
     const exact = await getDocs(query(collection(db, "users"), where("pseudo", "==", typed)));
     if (!exact.empty) return exact.docs[0];
 
@@ -55,7 +71,7 @@ async function findPlayerByPseudo(typed) {
     const matches = all.filter(d => normalizePseudo(d.data().pseudo) === wanted);
     if (matches.length === 1) return matches[0];
     if (matches.length > 1) {
-        throw new Error(`Plusieurs joueurs s'appellent comme ça (${matches.map(d => d.data().pseudo).join(', ')}) : écris le pseudo exactement.`);
+        throw new Error(`Plusieurs joueurs s'appellent comme ça : utilise leur code ami (${matches.map(d => friendCode(d.data().pseudo, d.id)).join(', ')}).`);
     }
     const close = all.map(d => d.data().pseudo)
         .filter(p => normalizePseudo(p).includes(wanted) || wanted.includes(normalizePseudo(p)))
@@ -63,6 +79,26 @@ async function findPlayerByPseudo(typed) {
     throw new Error(close.length
         ? `Aucun joueur « ${typed} ». Tu voulais dire : ${close.join(', ')} ?`
         : `Aucun joueur trouvé avec le pseudo « ${typed} ». Vérifie l'orthographe (son pseudo est affiché en haut de son écran).`);
+}
+
+/**
+ * Suggestions d'amis : d'abord les amis de mes amis, puis les joueurs vus le plus récemment.
+ * Exclut moi, mes amis, les demandes en cours (dans les deux sens).
+ * @returns {Promise<Array<{uid, pseudo, code, mutual:number}>>}
+ */
+export async function getFriendSuggestions(me, limit = 5) {
+    const all = (await getDocs(collection(db, "users"))).docs;
+    const mine = all.find(d => d.id === me.uid)?.data() || me;
+    const myFriends = new Set(mine.friends || []);
+    const asked = new Set(mine.friendRequests || []);
+    const seen = (u) => u.lastOnline?.toMillis?.() || 0;
+    return all
+        .filter(d => d.id !== me.uid && d.data().pseudo && !myFriends.has(d.id) && !asked.has(d.id)
+            && !(d.data().friendRequests || []).includes(me.uid))
+        .map(d => ({ uid: d.id, pseudo: d.data().pseudo, code: friendCode(d.data().pseudo, d.id),
+            mutual: (d.data().friends || []).filter(f => myFriends.has(f)).length, seen: seen(d.data()) }))
+        .sort((a, b) => b.mutual - a.mutual || b.seen - a.seen)
+        .slice(0, limit);
 }
 
 export async function acceptFriendRequest(myUid, requesterUid) {
@@ -162,8 +198,10 @@ export async function validateTrade(tradeId) {
             updatesA[field] = increment(d);
             updatesB[field] = increment(-d);
         }
-        if (Object.keys(updatesA).length) transaction.update(userARef, updatesA);
-        if (Object.keys(updatesB).length) transaction.update(userBRef, updatesB);
+        // lastDeal : les règles Firestore vérifient que l'échange passe à « completed » dans la même transaction
+        const lastDeal = { kind: 'trade', id: tradeId };
+        if (Object.keys(updatesA).length) transaction.update(userARef, { ...updatesA, lastDeal });
+        if (Object.keys(updatesB).length) transaction.update(userBRef, { ...updatesB, lastDeal });
         transaction.update(tradeRef, { status: "completed" });
     });
 }

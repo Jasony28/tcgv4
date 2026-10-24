@@ -108,7 +108,8 @@ const BOOSTER_WORDS = {
     classic: ['Booster Classique', 'Boosters Classiques'],
     v2: ['Booster V2', 'Boosters V2'],
     v3: ['Booster V3', 'Boosters V3'],
-    legendary: ['Booster Légendaire', 'Boosters Légendaires']
+    legendary: ['Booster Légendaire', 'Boosters Légendaires'],
+    v3_legendary: ['Booster Légendaire V3', 'Boosters Légendaires V3']
 };
 export const BOOSTER_NAMES = Object.fromEntries(Object.entries(BOOSTER_WORDS).map(([t, [one]]) => [t, one]));
 /** "3 Boosters Classiques, 1 Booster V2" */

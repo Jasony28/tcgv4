@@ -20,7 +20,8 @@ export const BOOSTER_INFO = {
     classic: { name: 'Booster Classique', minPrice: 10 },
     v2: { name: 'Booster V2', minPrice: 15 },
     ...(V3_RELEASED ? { v3: { name: 'Booster V3', minPrice: 15 } } : {}),
-    legendary: { name: 'Booster Légendaire', minPrice: 50 }
+    legendary: { name: 'Booster Légendaire', minPrice: 50 },
+    v3_legendary: { name: 'Booster Légendaire V3', minPrice: 80 }
 };
 // Displays fermées (boîtes de boosters) : objets de collection, surtout quand leur série est terminée
 export const DISPLAY_INFO = {
@@ -153,6 +154,12 @@ export async function createListing(seller, { mode, item, startPrice, wantedCard
     return listingRef.id;
 }
 
+/**
+ * Marque une écriture sur le compte d'un autre joueur : les règles Firestore vérifient que
+ * l'annonce change dans la même transaction et que les deux joueurs y participent.
+ */
+const auctionDeal = (id) => ({ kind: 'auction', id });
+
 /** Mise sur une enchère en pièces. Renvoie le nouveau prix. */
 export async function placeBid(bidder, listingId, bidAmount) {
     const amount = Math.floor(bidAmount);
@@ -180,7 +187,7 @@ export async function placeBid(bidder, listingId, bidAmount) {
         if ((userDoc.data().coins || 0) < cost) throw new Error("Pas assez de pièces pour miser !");
 
         if (listing.highestBidderId && !alreadyHighest) {
-            transaction.update(doc(db, "users", listing.highestBidderId), { coins: increment(listing.currentPrice) });
+            transaction.update(doc(db, "users", listing.highestBidderId), { coins: increment(listing.currentPrice), lastDeal: auctionDeal(listingId) });
         }
         const pseudo = userDoc.data().pseudo || "???";
         transaction.update(userRef, { coins: increment(-cost) });
@@ -222,7 +229,7 @@ export async function acceptTradeListing(buyer, listingId, offeredCardId) {
         addTo(buyerTotals, `collection.${offeredCardId}.quantity`, -1);
         addTo(buyerTotals, itemField(item), item.quantity);
         transaction.update(buyerRef, toIncrements(buyerTotals));
-        transaction.update(sellerRef, { [`collection.${offeredCardId}.quantity`]: increment(1) });
+        transaction.update(sellerRef, { [`collection.${offeredCardId}.quantity`]: increment(1), lastDeal: auctionDeal(listingId) });
         transaction.update(listingRef, {
             status: 'completed',
             buyerId: buyer.uid,
@@ -247,7 +254,7 @@ export async function cancelListing(seller, listingId) {
 
         const item = getListingItem(listing);
         if (listing.highestBidderId) {
-            transaction.update(doc(db, "users", listing.highestBidderId), { coins: increment(listing.currentPrice) });
+            transaction.update(doc(db, "users", listing.highestBidderId), { coins: increment(listing.currentPrice), lastDeal: auctionDeal(listingId) });
         }
         transaction.update(doc(db, "users", listing.sellerId), { [itemField(item)]: increment(item.quantity) });
         transaction.update(listingRef, { status: 'cancelled' });
@@ -260,12 +267,15 @@ export async function cancelListing(seller, listingId) {
  * est relue dans sa transaction et n'est traitée que si elle est encore active.
  * @returns {Promise<Array<{listing:object, outcome:'sold'|'returned'}>>}
  */
-export async function finalizeExpiredListings() {
+export async function finalizeExpiredListings(myUid = null) {
     const q = query(collection(db, "auctions"), where("status", "==", "active"), where("endTime", "<=", Timestamp.now()));
     const snapshot = await getDocs(q);
     const results = [];
 
     for (const docSnap of snapshot.docs) {
+        // Les règles Firestore n'autorisent que les participants : les autres annonces sont closes par GitHub Actions
+        const d = docSnap.data();
+        if (myUid && d.sellerId !== myUid && d.highestBidderId !== myUid) continue;
         const listingRef = doc(db, "auctions", docSnap.id);
         let outcome = null;
         let listing = null;
@@ -284,12 +294,12 @@ export async function finalizeExpiredListings() {
 
                 if (buyerDoc?.exists()) {
                     // Enchère gagnée
-                    transaction.update(buyerRef, { [itemField(item)]: increment(item.quantity) });
-                    if (sellerDoc.exists()) transaction.update(sellerRef, { coins: increment(sellerProceeds(listing.currentPrice)) });
+                    transaction.update(buyerRef, { [itemField(item)]: increment(item.quantity), lastDeal: auctionDeal(docSnap.id) });
+                    if (sellerDoc.exists()) transaction.update(sellerRef, { coins: increment(sellerProceeds(listing.currentPrice)), lastDeal: auctionDeal(docSnap.id) });
                     outcome = 'sold';
                 } else {
                     // Personne (ou acheteur supprimé) : l'objet revient au vendeur
-                    if (sellerDoc.exists()) transaction.update(sellerRef, { [itemField(item)]: increment(item.quantity) });
+                    if (sellerDoc.exists()) transaction.update(sellerRef, { [itemField(item)]: increment(item.quantity), lastDeal: auctionDeal(docSnap.id) });
                     outcome = 'returned';
                 }
                 transaction.update(listingRef, { status: 'ended' });

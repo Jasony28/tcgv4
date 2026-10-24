@@ -1754,6 +1754,15 @@ button:disabled { opacity: .55; cursor: not-allowed; transform: none; }
     border: 1px solid rgba(255, 159, 28, 0.5);
 }
 .series-banner[hidden] { display: none; }
+.friend-code-line { margin: 8px 0 0; font-size: .85rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.friend-code-line strong { color: var(--gold-light); letter-spacing: .5px; }
+.friend-suggestions:empty { display: none; }
+.friend-suggestions { margin-top: 10px; display: grid; gap: 6px; }
+.suggest-title { margin: 0; font-size: .8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+.suggest-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px;
+    border-radius: 12px; background: rgba(255, 255, 255, 0.05); }
+.suggest-row small { color: var(--text-muted); }
+.suggest-row .profile-btn { width: auto; }
 .series-news { display: block; padding: 6px 0; line-height: 1.4; }
 .series-news + .series-news { border-top: 1px solid rgba(255, 255, 255, 0.12); }
 .series-news.new strong { color: #d7a6ff; }

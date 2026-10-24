@@ -14,11 +14,11 @@ import { V3_RELEASED } from './cards-v3.js';
 export const SERIES = {
     v1: { name: 'Série V1', boosterTypes: ['classic', 'legendary'], release: '2025-06-21', end: '2026-10-23' },
     v2: { name: 'Série V2', boosterTypes: ['v2'], release: '2025-06-21', end: '2026-10-31' },
-    v3: { name: 'Série V3', boosterTypes: ['v3'], release: '2026-10-24', end: null }
+    v3: { name: 'Série V3', boosterTypes: ['v3', 'v3_legendary'], release: '2026-10-24', end: null }
 };
 
 // Valeur en pièces d'un booster quand une récompense prévoit un booster d'une série terminée
-export const BOOSTER_COIN_VALUE = { classic: 20, v2: 30, v3: 35, legendary: 90 };
+export const BOOSTER_COIN_VALUE = { classic: 20, v2: 30, v3: 35, legendary: 90, v3_legendary: 120 };
 
 /** Série d'un type de booster ('classic' → 'v1') */
 export function seriesOfBooster(boosterType) {

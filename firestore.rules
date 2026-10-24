@@ -1,0 +1,115 @@
+rules_version = '2';
+// Règles de sécurité Firestore du TCG JWBnDr.
+// Déploiement : firebase deploy --only firestore:rules   (ou copier-coller dans la console Firebase → Firestore → Règles)
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- FONCTIONS UTILITAIRES ---
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Champs modifiés par la requête
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // Dans la liste « field » (ex : friendRequests), je ne peux ajouter ou retirer que MON identifiant
+    function onlyMyIdChanges(field) {
+      let before = resource.data.get(field, []).toSet();
+      let after = request.resource.data.get(field, []).toSet();
+      return after.difference(before).hasOnly([request.auth.uid])
+          && before.difference(after).hasOnly([request.auth.uid]);
+    }
+
+    // AMIS — sur le compte d'un autre joueur, je peux seulement :
+    //  - envoyer / retirer ma demande d'ami (friendRequests)
+    //  - me retirer de ses amis, ou m'y ajouter si je l'ai déjà mis dans MES amis (demande acceptée)
+    function friendUpdate(userId) {
+      let addsMeToFriends = request.resource.data.get('friends', []).hasAny([request.auth.uid])
+                         && !resource.data.get('friends', []).hasAny([request.auth.uid]);
+      return isSignedIn()
+          && changedKeys().hasOnly(['friendRequests', 'friends'])
+          && (!changedKeys().hasAny(['friendRequests']) || onlyMyIdChanges('friendRequests'))
+          && (!changedKeys().hasAny(['friends']) || onlyMyIdChanges('friends'))
+          && (!addsMeToFriends
+              || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('friends', []).hasAny([userId]));
+    }
+
+    // HÔTEL DES VENTES / ÉCHANGES — l'économie d'un autre joueur (pièces, cartes, boosters, displays,
+    // stats) ne peut changer que pendant une affaire entre lui et moi, modifiée dans la même transaction.
+    // Le jeu indique l'affaire dans le champ lastDeal : { kind: 'auction' | 'trade', id }.
+    function dealUpdate(userId) {
+      let deal = request.resource.data.get('lastDeal', {});
+      return isSignedIn()
+          && changedKeys().hasOnly(['coins', 'collection', 'boosterInventory', 'displayInventory', 'stats', 'lastDeal'])
+          && deal is map
+          && deal.get('id', '') is string && deal.get('id', '') != ''
+          && (auctionDeal(deal, userId) || tradeDeal(deal, userId));
+    }
+
+    // Enchère / annonce d'échange : il était vendeur ou meilleur enchérisseur, j'y participe après la
+    // transaction (vendeur, nouvel enchérisseur ou acheteur), et l'annonce change en même temps.
+    function auctionDeal(deal, userId) {
+      let path = /databases/$(database)/documents/auctions/$(deal.id);
+      let before = get(path).data;
+      let after = getAfter(path).data;
+      return deal.kind == 'auction'
+          && before.status == 'active'
+          && after != before
+          && [before.sellerId, before.get('highestBidderId', '')].hasAny([userId])
+          && [after.sellerId, after.get('highestBidderId', ''), after.get('buyerId', '')].hasAny([request.auth.uid]);
+    }
+
+    // Échange entre amis : nous sommes les deux participants et il passe à « completed » maintenant
+    function tradeDeal(deal, userId) {
+      let path = /databases/$(database)/documents/tradeRequests/$(deal.id);
+      let before = get(path).data;
+      let after = getAfter(path).data;
+      return deal.kind == 'trade'
+          && before.status != 'completed'
+          && after.status == 'completed'
+          && [before.from, before.to].hasAll([request.auth.uid, userId]);
+    }
+
+    // --- RÈGLES PAR COLLECTION ---
+
+    // 1. UTILISATEURS
+    match /users/{userId} {
+      // Lecture par tout joueur connecté (pseudo d'un vendeur, profil d'un ami…)
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId);
+      // Mon compte : librement. Le compte d'un autre : seulement amis ou affaire en cours entre nous.
+      allow update: if isOwner(userId) || friendUpdate(userId) || dealUpdate(userId);
+      allow delete: if false;
+    }
+
+    // 2. ENCHÈRES (Hôtel des Ventes)
+    match /auctions/{auctionId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.sellerId == request.auth.uid;
+      allow update: if isSignedIn();
+    }
+    match /auctions/{auctionId}/bids/{bidId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.bidderId == request.auth.uid;
+    }
+
+    // 3. ÉCHANGES ENTRE AMIS
+    match /tradeRequests/{tradeId} {
+      allow read: if isSignedIn() && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.from == request.auth.uid;
+      allow update: if isSignedIn() && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
+    }
+
+    // 4. TOUT LE RESTE : interdit
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

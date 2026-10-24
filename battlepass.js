@@ -13,7 +13,7 @@ import { allCardsV2 } from './cards1.js';
 import { allCardsV3Released } from './cards-v3.js';
 import { isBoosterProduced, isCardProduced, BOOSTER_COIN_VALUE } from './series-config.js';
 
-const BOOSTER_REWARDS = { classic_booster: 'classic', legendary_booster: 'legendary', v2_booster: 'v2', v3_booster: 'v3' };
+const BOOSTER_REWARDS = { classic_booster: 'classic', legendary_booster: 'legendary', v2_booster: 'v2', v3_booster: 'v3', v3_legendary_booster: 'v3_legendary' };
 const CARD_POOL = [...allCards, ...allCardsV2, ...allCardsV3Released];
 
 const trackContainer = document.querySelector('.pass-track');
@@ -159,7 +159,7 @@ async function claimRewards(rewards) {
     for (const r of rewards) {
         if (r.type === 'random_card') {
             // Seulement des cartes de séries encore en cours
-            const candidates = CARD_POOL.filter(c => c.rarity === r.rarity && isCardProduced(c));
+            const candidates = CARD_POOL.filter(c => c.rarity === r.rarity && isCardProduced(c) && (!r.version || c.version === r.version));
             drawnCards[r.step] = candidates[Math.floor(Math.random() * candidates.length)];
         }
     }

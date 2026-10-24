@@ -30,9 +30,12 @@
 
             <!-- Gestion des amis -->
             <div class="add-friend-row">
-                <input type="text" id="friend-pseudo-input" placeholder="Pseudo de ton ami" maxlength="20" autocomplete="off">
+                <input type="text" id="friend-pseudo-input" placeholder="Pseudo ou code (ex : Jason#4821)" maxlength="30" autocomplete="off">
                 <button id="add-friend-btn" class="profile-btn primary">Ajouter</button>
             </div>
+            <p class="friend-code-line">Ton code ami : <strong id="my-friend-code">…</strong>
+                <button id="copy-friend-code" class="profile-btn ghost small" type="button">Copier</button></p>
+            <div id="friend-suggestions" class="friend-suggestions"></div>
             <div class="profile-actions">
                 <button id="friends-list-btn" class="profile-btn">Mes amis</button>
                 <button id="friend-requests-btn" class="profile-btn">Demandes</button>

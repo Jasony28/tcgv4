@@ -14,7 +14,7 @@ const DISPLAY_NAMES = {
     classic: 'Display Classique', v2: 'Display V2', v3: 'Display V3', legendary: 'Coffret Légendaire'
 };
 const BOOSTER_NAMES = {
-    classic: 'Booster Classique', v2: 'Booster V2', v3: 'Booster V3', legendary: 'Booster Légendaire'
+    classic: 'Booster Classique', v2: 'Booster V2', v3: 'Booster V3', legendary: 'Booster Légendaire', v3_legendary: 'Booster Légendaire V3'
 };
 
 export function getListingItem(listing) {
