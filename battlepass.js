@@ -13,7 +13,7 @@ import { allCardsV2 } from './cards1.js';
 import { allCardsV3Released } from './cards-v3.js';
 import { isBoosterProduced, isCardProduced, BOOSTER_COIN_VALUE } from './series-config.js';
 
-const BOOSTER_REWARDS = { classic_booster: 'classic', legendary_booster: 'legendary', v2_booster: 'v2' };
+const BOOSTER_REWARDS = { classic_booster: 'classic', legendary_booster: 'legendary', v2_booster: 'v2', v3_booster: 'v3' };
 const CARD_POOL = [...allCards, ...allCardsV2, ...allCardsV3Released];
 
 const trackContainer = document.querySelector('.pass-track');

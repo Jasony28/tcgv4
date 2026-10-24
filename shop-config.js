@@ -69,25 +69,25 @@ export function displaySaving(type) {
 export const SHOP_PACKS = {
     starter: {
         name: 'Pack Débutant', icon: '🎒', limit: 'once', price: 49,
-        description: '3 Boosters Classiques + 1 Booster V2 + 1 Booster Légendaire',
-        contents: { classic: 3, v2: 1, legendary: 1 }
+        description: '5 Boosters V3 pour bien démarrer la collection',
+        contents: { v3: 5 }
     },
     mystery: {
         name: 'Pack Mystère', icon: '❓', limit: 'daily', price: 50,
-        description: '2 à 4 boosters surprise… et parfois le jackpot !'
+        description: '2 à 6 Boosters V3 surprise… et parfois le jackpot !'
     },
     weekend: {
         name: 'Pack du Week-end', icon: '🎉', limit: 'weekend', price: 120,
-        description: '2 Boosters V2 + 1 Booster Légendaire + 30 pièces',
-        contents: { v2: 2, legendary: 1 }, coins: 30
+        description: '4 Boosters V3 + 30 pièces',
+        contents: { v3: 4 }, coins: 30
     }
 };
 // Tirages possibles du Pack Mystère (chance en %)
 export const MYSTERY_TABLE = [
-    { chance: 50, contents: { classic: 2, v2: 1 }, label: 'Classique' },
-    { chance: 30, contents: { classic: 1, v2: 2 }, label: 'Bon tirage' },
-    { chance: 15, contents: { classic: 1, legendary: 1 }, label: 'Super tirage' },
-    { chance: 5, contents: { v2: 2, legendary: 2 }, label: 'JACKPOT' }
+    { chance: 50, contents: { v3: 2 }, label: 'Classique' },
+    { chance: 30, contents: { v3: 3 }, label: 'Bon tirage' },
+    { chance: 15, contents: { v3: 4 }, label: 'Super tirage' },
+    { chance: 5, contents: { v3: 6 }, label: 'JACKPOT' }
 ];
 export function rollMysteryPack(rand = Math.random) {
     let roll = rand() * MYSTERY_TABLE.reduce((s, e) => s + e.chance, 0);
@@ -98,7 +98,7 @@ export function rollMysteryPack(rand = Math.random) {
 // ---------- Cadeau du jour : calendrier de 7 jours (la série repart à zéro si on rate un jour) ----------
 export const GIFT_CALENDAR = [
     { coins: 5 }, { coins: 10 }, { coins: 15 }, { coins: 20 },
-    { coins: 30 }, { coins: 40 }, { coins: 60, boosters: { v2: 1 } }
+    { coins: 30 }, { coins: 40 }, { coins: 60, boosters: { v3: 1 } }
 ];
 /** Gardé pour les anciens affichages */
 export const DAILY_GIFT_COINS = GIFT_CALENDAR[0].coins;

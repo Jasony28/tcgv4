@@ -2,7 +2,7 @@ import { updateDoc, doc, getDoc, Timestamp, runTransaction, increment } from "ht
 import { db } from './firebase-config.js';
 import { protectPage } from './auth-manager.js';
 import { allCardsV2 } from './cards1.js';
-import { allCardsV3, V3_RELEASED } from './cards-v3.js';
+import { allCardsV3Released, V3_RELEASED } from './cards-v3.js';
 import { updateQuestProgress } from './quest-manager.js';
 import { updateUserStats } from './stats-manager.js';
 import { showToast, showConfirmDialog } from './toast.js';
@@ -10,7 +10,7 @@ import { getDayKey } from './daily-utils.js';
 import { playBoosterOpening } from './booster-animation.js';
 import { SHOP_DISPLAYS } from './shop-config.js';
 import { openDisplay, keepDailyBooster } from './inventory-service.js';
-import { SERIES, seriesOfBooster, seriesStatus, isBoosterProduced, daysUntilEnd } from './series-config.js';
+import { seriesOfBooster, seriesStatus, isBoosterProduced, daysUntilEnd, mainDailyBoosterType, seriesAnnouncements } from './series-config.js';
 import { DAILY_BOOSTER_LIMIT, DAILY_V2_BOOSTER_LIMIT, LEGENDARY_CHANCE, drawClassicBoosterCards, drawLegendaryBoosterCards } from './booster-draws.js';
 
 // --- Éléments du DOM ---
@@ -61,9 +61,15 @@ async function handleOpenBooster(type) {
 }
 
 // --- Affichage des boosters et listeners ---
+// Libellé du booster gratuit principal selon la série en cours
+const MAIN_DAILY_LABEL = { classic: 'V1', v3: 'V3' };
+
 function displayAvailableBoosters() {
     const boostersOpened = userData.dailyBoosterOpenedCount || 0;
+    const mainType = mainDailyBoosterType();
+    const mainLabel = MAIN_DAILY_LABEL[mainType] || '';
     dailyBoosterArea.style.display = 'block';
+    document.getElementById('daily-main-tag').hidden = mainType !== 'v3';
 
     // --- DAILY ---
     // On clone pour reset les listeners (évite le double-clic)
@@ -73,12 +79,12 @@ function displayAvailableBoosters() {
 
     if (boostersOpened < DAILY_BOOSTER_LIMIT) {
         const remaining = DAILY_BOOSTER_LIMIT - boostersOpened;
-        boosterStatusEl.textContent = `Boosters V1 du jour : ${remaining}/${DAILY_BOOSTER_LIMIT}`;
+        boosterStatusEl.textContent = `Boosters ${mainLabel} du jour : ${remaining}/${DAILY_BOOSTER_LIMIT}`;
         newDaily.style.opacity = 1;
         newDaily.style.cursor = 'pointer';
         newDaily.addEventListener('click', () => handleOpenBooster('daily'), { once: true });
     } else {
-        boosterStatusEl.textContent = "Boosters V1 du jour épuisés. Revenez demain !";
+        boosterStatusEl.textContent = `Boosters ${mainLabel} du jour épuisés. Revenez demain !`;
         newDaily.style.opacity = 0.5;
         newDaily.style.cursor = 'not-allowed';
     }
@@ -163,15 +169,14 @@ function displayAvailableBoosters() {
     }
 
     // --- Séries : plus de boosters gratuits pour une série terminée ---
-    const v1Active = isBoosterProduced('classic');
     const v2Active = isBoosterProduced('v2');
-    if (!v1Active) dailyBoosterArea.style.display = 'none';
+    if (!mainType) dailyBoosterArea.style.display = 'none';
     if (!v2Active) document.getElementById('daily-v2-booster-area').style.display = 'none';
 
     // --- Garder les boosters gratuits pour plus tard ---
     const keepV1 = document.getElementById('keep-v1-button');
     keepV1.disabled = boostersOpened >= DAILY_BOOSTER_LIMIT;
-    keepV1.onclick = () => handleKeepDaily('v1');
+    keepV1.onclick = () => handleKeepDaily('main');
     const keepV2 = document.getElementById('keep-v2-button');
     keepV2.disabled = v2Opened >= DAILY_V2_BOOSTER_LIMIT;
     keepV2.onclick = () => handleKeepDaily('v2');
@@ -208,9 +213,9 @@ function displayAvailableBoosters() {
 
     // --- Bandeau « fin de série » ---
     const banner = document.getElementById('series-banner');
-    const ending = Object.keys(SERIES).map(k => ({ k, days: daysUntilEnd(k) })).filter(s => s.days !== null && seriesStatus(s.k) === 'active');
-    banner.hidden = ending.length === 0;
-    banner.innerHTML = ending.map(s => `⏳ <strong>${SERIES[s.k].name}</strong> : ${s.days === 0 ? "dernier jour" : `fin dans ${s.days} jour${s.days > 1 ? 's' : ''}`} ! Après, plus aucun booster ne sera produit : garde-en fermés, ils deviendront rares.`).join('<br>');
+    const news = seriesAnnouncements();
+    banner.hidden = news.length === 0;
+    banner.innerHTML = news.map(n => `<span class="series-news ${n.kind}">${n.text}</span>`).join('');
 }
 
 /** Petit badge « Fin dans X j » ou « Série terminée » */
@@ -228,7 +233,8 @@ async function handleKeepDaily(kind) {
     transactionInProgress = true;
     try {
         await keepDailyBooster(userData.uid, kind);
-        showToast('success', `📦 Booster ${kind.toUpperCase()} rangé dans ton inventaire !`);
+        const label = kind === 'v2' ? 'V2' : MAIN_DAILY_LABEL[mainDailyBoosterType()];
+        showToast('success', `📦 Booster ${label} rangé dans ton inventaire !`);
         await refreshUserData();
     } catch (e) {
         showToast('error', e.message || "Impossible de garder ce booster.");
@@ -273,12 +279,12 @@ async function openBooster(boosterType) {
 
     let drawnCards;
     // Boosters gratuits du jour : V1 (contenu classique) et V2 (contenu V2), chacun son compteur
-    const drawBoosterType = { daily: 'classic', daily_v2: 'v2' }[boosterType] || boosterType;
+    const drawBoosterType = { daily: mainDailyBoosterType(), daily_v2: 'v2' }[boosterType] || boosterType;
 
     if (drawBoosterType === 'legendary') {
         drawnCards = drawLegendaryBoosterCards();
     } else if (drawBoosterType === 'v3') {
-        drawnCards = drawClassicBoosterCards(allCardsV3, LEGENDARY_CHANCE.v3);
+        drawnCards = drawClassicBoosterCards(allCardsV3Released, LEGENDARY_CHANCE.v3);
     } else if (drawBoosterType === 'v2') {
         drawnCards = drawClassicBoosterCards(allCardsV2, LEGENDARY_CHANCE.v2);
     } else {
@@ -316,6 +322,9 @@ async function updateQuestsAfterBoosterOpen(boosterType, drawnCards) {
     }
     if (boosterType === 'v2') {
         await updateQuestProgress('open_v2_booster');
+    }
+    if (boosterType === 'v3') {
+        await updateQuestProgress('open_v3_booster');
     }
 }
 
@@ -376,7 +385,7 @@ async function updateUserAfterBoosterOpen(boosterType, drawnCards) {
             }
 
             // Boosters gratuits : seulement si leur série est encore en cours
-            if ((boosterType === 'daily' && !isBoosterProduced('classic')) || (boosterType === 'daily_v2' && !isBoosterProduced('v2'))) {
+            if ((boosterType === 'daily' && !mainDailyBoosterType()) || (boosterType === 'daily_v2' && !isBoosterProduced('v2'))) {
                 throw new Error("Cette série est terminée : plus de booster gratuit.");
             }
             if (boosterType === 'daily') {

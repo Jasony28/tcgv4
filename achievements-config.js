@@ -2,13 +2,13 @@
 // Modifie les récompenses ici. Une récompense = { coins, classic, v2, legendary } (boosters).
 import { allCards } from './cards.js';
 import { allCardsV2 } from './cards1.js';
-import { allCardsV3, V3_RELEASED } from './cards-v3.js';
+import { allCardsV3Released, V3_RELEASED } from './cards-v3.js';
 
 const SETS = {
     v1: { label: 'V1', cards: allCards },
     v2: { label: 'V2', cards: allCardsV2 },
     // Les succès V3 apparaissent à la sortie de la collection
-    ...(V3_RELEASED ? { v3: { label: 'V3', cards: allCardsV3 } } : {})
+    ...(V3_RELEASED ? { v3: { label: 'V3', cards: allCardsV3Released } } : {})
 };
 
 const RARITIES = [
@@ -44,9 +44,9 @@ const REWARDS = {
     v3: {
         commune: { coins: 50, v3: 1 },
         rare: { coins: 80, v3: 1 },
-        epique: { coins: 100, legendary: 1 },
-        legendaire: { coins: 200, legendary: 2 },
-        album: { coins: 500, v3: 3, legendary: 2 }
+        epique: { coins: 100, v3: 2 },
+        legendaire: { coins: 200, v3: 4 },
+        album: { coins: 500, v3: 8 }
     }
 };
 

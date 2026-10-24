@@ -12,9 +12,9 @@ import { getDayKey } from './daily-utils.js';
 import { V3_RELEASED } from './cards-v3.js';
 
 export const SERIES = {
-    v1: { name: 'Série V1', boosterTypes: ['classic', 'legendary'], release: '2025-06-21', end: null },
-    v2: { name: 'Série V2', boosterTypes: ['v2'], release: '2025-06-21', end: null },
-    v3: { name: 'Série V3', boosterTypes: ['v3'], release: null, end: null }
+    v1: { name: 'Série V1', boosterTypes: ['classic', 'legendary'], release: '2025-06-21', end: '2026-10-23' },
+    v2: { name: 'Série V2', boosterTypes: ['v2'], release: '2025-06-21', end: '2026-10-31' },
+    v3: { name: 'Série V3', boosterTypes: ['v3'], release: '2026-10-24', end: null }
 };
 
 // Valeur en pièces d'un booster quand une récompense prévoit un booster d'une série terminée
@@ -63,4 +63,49 @@ export function convertEndedBoosters(boosters, day) {
         else coins += n * (BOOSTER_COIN_VALUE[type] || 20);
     }
     return { boosters: kept, coins };
+}
+
+/**
+ * Booster gratuit « principal » du jour (3 par jour, compteur dailyBoosterOpenedCount) :
+ * celui de la V1 tant qu'elle est en cours, puis celui de la V3. null s'il n'y en a plus.
+ */
+export function mainDailyBoosterType(day = getDayKey()) {
+    if (isBoosterProduced('classic', day)) return 'classic';
+    if (isBoosterProduced('v3', day)) return 'v3';
+    return null;
+}
+
+const toUTC = (d) => { const [y, m, dd] = d.split('-').map(Number); return Date.UTC(y, m - 1, dd); };
+const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+/** '2026-11-01' → '1er novembre' */
+export function frenchDate(dayKey) {
+    const [, m, d] = dayKey.split('-').map(Number);
+    return `${d === 1 ? '1er' : d} ${MONTHS[m - 1]}`;
+}
+/** Lendemain d'une date 'AAAA-MM-JJ' (premier jour sans production après une fin de série) */
+const nextDay = (dayKey) => new Date(toUTC(dayKey) + 86400000).toISOString().slice(0, 10);
+
+/**
+ * Annonces de séries à afficher aux joueurs (page Booster, boutique) :
+ * nouvelle série (7 jours), série qui se termine bientôt, série terminée depuis peu (7 jours).
+ * @returns {Array<{kind:'new'|'ending'|'ended', series:string, text:string}>}
+ */
+export function seriesAnnouncements(day = getDayKey()) {
+    const out = [];
+    const since = (d) => Math.round((toUTC(day) - toUTC(d)) / 86400000);
+    for (const [key, s] of Object.entries(SERIES)) {
+        const status = seriesStatus(key, day);
+        if (status === 'active' && s.release && since(s.release) < 7) {
+            out.push({ kind: 'new', series: key, text: `✨ La <strong>${s.name}</strong> est sortie ! Nouvelles cartes, nouveaux boosters et boosters gratuits chaque jour.` });
+        }
+        if (status === 'active' && s.end) {
+            const days = daysUntilEnd(key, day);
+            out.push({ kind: 'ending', series: key, text: `⏳ Fin de la <strong>${s.name}</strong> le ${frenchDate(nextDay(s.end))}${days === 0 ? " (dernier jour aujourd'hui)" : ` (dans ${days + 1} jour${days ? 's' : ''})`} : ses boosters et displays ne seront plus vendus ni donnés. Ceux que tu as déjà restent à toi : garde-les fermés, ils deviendront rares !` });
+        }
+        if (status === 'ended' && s.end && since(s.end) <= 7) {
+            out.push({ kind: 'ended', series: key, text: `💎 La <strong>${s.name}</strong> est terminée : plus aucun booster n'est produit. Les boosters et displays fermés deviennent des objets de collection, à ouvrir ou à vendre au marché.` });
+        }
+    }
+    const order = { new: 0, ending: 1, ended: 2 };
+    return out.sort((x, y) => order[x.kind] - order[y.kind]);
 }

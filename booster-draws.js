@@ -2,7 +2,7 @@
 import { allCards } from './cards.js';
 
 // Boosters gratuits par jour (page Booster) : chaque collection a son propre compteur
-export const DAILY_BOOSTER_LIMIT = 3;     // boosters V1
+export const DAILY_BOOSTER_LIMIT = 3;     // booster principal : V1, puis V3 une fois la V1 terminée
 export const DAILY_V2_BOOSTER_LIMIT = 2;  // boosters V2
 
 // Chance que la 5e carte d'un booster soit une légendaire, selon le type de booster.

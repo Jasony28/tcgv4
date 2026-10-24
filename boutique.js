@@ -14,7 +14,7 @@ import {
     getShopState, getGiftStatus, packAvailability,
     buyCard, buyBooster, buyDisplay, buyPack, claimGift
 } from './shop-service.js';
-import { isBoosterProduced } from './series-config.js';
+import { isBoosterProduced, seriesAnnouncements } from './series-config.js';
 
 const $ = (id) => document.getElementById(id);
 let userData;
@@ -169,7 +169,14 @@ function renderBoosters() {
     }
 }
 
+function renderAnnouncements() {
+    const news = seriesAnnouncements(currentDay);
+    $('series-banner').hidden = news.length === 0;
+    $('series-banner').innerHTML = news.map(n => `<span class="series-news ${n.kind}">${n.text}</span>`).join('');
+}
+
 function render() {
+    renderAnnouncements();
     renderGift();
     renderDeal();
     renderPacks();
