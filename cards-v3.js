@@ -20,7 +20,7 @@ export const allCardsV3 = [
     { id: 'V3_008', name: "Sphinx-Plasma", rarity: 'epique', image: 'assets/cards3/V3_008.webp', version: 'v3' },
     { id: 'V3_009', name: "Pégase-Hydraulique", rarity: 'epique', image: 'assets/cards3/V3_009.webp', version: 'v3' },
     { id: 'V3_010', name: "Fenrir Brise-Monde EX", rarity: 'Légendaire', image: 'assets/cards3/V3_010.webp', version: 'v3' },
-    { id: 'V3_011', name: "Chronos-Titan EX", rarity: 'Légendaire', image: 'assets/cards3/V3_011.svg', version: 'v3', upcoming: true },
+    { id: 'V3_011', name: "Chronos-Titan EX", rarity: 'Légendaire', image: 'assets/cards3/V3_011.webp', version: 'v3' },
     { id: 'V3_012', name: "Médusolt", rarity: 'Commune', image: 'assets/cards3/V3_012.webp', version: 'v3' },
     { id: 'V3_013', name: "Crabe-Néon", rarity: 'Commune', image: 'assets/cards3/V3_013.webp', version: 'v3' },
     { id: 'V3_014', name: "Anguille-Abysse", rarity: 'Commune', image: 'assets/cards3/V3_014.webp', version: 'v3' },
