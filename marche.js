@@ -138,16 +138,12 @@ async function runFinalize() {
         const item = getListingItem(listing);
         const name = describeItem(item).name;
         if (outcome === 'sold') {
-            await updateUserStats(listing.sellerId, { cardsSoldMarket: 1, bestSale: { cardId: item.cardId || null, name, price: listing.currentPrice } });
-            await updateUserStats(listing.highestBidderId, { bestPurchase: { cardId: item.cardId || null, name, price: listing.currentPrice } });
             // La quête ne peut être créditée qu'au joueur connecté : seulement s'il est le gagnant
             if (listing.highestBidderId === me.uid) {
                 await updateQuestProgress('win_bid');
                 showToast('success', `🎉 Tu as remporté ${name} !`);
             }
             if (listing.sellerId === me.uid) showToast('success', `💰 ${name} vendu pour ${listing.currentPrice} pièces (tu reçois ${sellerProceeds(listing.currentPrice)} après la taxe) !`);
-        } else if (getListingType(listing) === 'auction') {
-            await updateUserStats(listing.sellerId, { failedSales: 1 });
         }
         if (outcome === 'returned' && listing.sellerId === me.uid) showToast('info', `${name} n'a pas trouvé preneur : il t'a été rendu.`);
     }

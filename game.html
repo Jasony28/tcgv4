@@ -14,14 +14,19 @@
     <link rel="apple-touch-icon" href="assets/logo/logo.png">
     <link rel="icon" href="assets/logo/logo.png">
 </head>
-<body>
+<body data-view="daily">
     <script src="splash.js"></script>
    <header class="main-header"></header>
     <main class="game-container">
         <h2>Ouvrir un Booster</h2>
+        <nav class="booster-tabs" aria-label="Boosters">
+            <a href="game.html" class="booster-tab" data-view-link="daily">🎁 À ouvrir</a>
+            <a href="inventaire.html" class="booster-tab" data-view-link="inventory">📦 Inventaire <span id="inventory-count-pill" class="count-pill" hidden></span></a>
+        </nav>
         <p class="page-subtitle">Touche un booster pour l'ouvrir</p>
         <p id="series-banner" class="series-banner" hidden></p>
         <div id="booster-selection-container">
+            <div class="view-daily">
             <h3 class="booster-section-title">🎁 Gratuits aujourd'hui</h3>
             <div id="daily-booster-area" class="booster-option" style="display: none;">
                 <p id="booster-status">...</p>
@@ -40,6 +45,8 @@
                 <button id="keep-v2-button" class="keep-button">📦 Garder pour plus tard</button>
             </div>
 
+            </div>
+            <div class="view-inventory">
             <h3 class="booster-section-title">📦 Mon inventaire</h3>
             <p id="inventory-empty" class="inventory-empty" hidden>Ton inventaire est vide. Garde tes boosters gratuits pour plus tard, ou achète-en à la boutique !</p>
             <div id="display-inventory" class="display-inventory"></div>
@@ -80,6 +87,7 @@
                     <span class="v2-tag v3-tag">V3 ★</span>
                     <span class="inventory-count" id="v3_legendary-booster-count">x0</span>
                 </div>
+            </div>
             </div>
             <a href="boutique.html" class="shop-cta">🛒 Plus de boosters à la boutique</a>
         </div>

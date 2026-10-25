@@ -17,6 +17,7 @@ import { getLevel } from './battlepass-config.js';
 import { cardLabel } from './market-service.js';
 import { allCardsV3, allCardsV3Released, V3_RELEASED } from './cards-v3.js';
 import { getWeekKey } from './daily-utils.js';
+import { playerLevel, xpCounters, XP_RULES } from './player-level.js';
 
 // ----------- VARIABLES GLOBALES -----------
 
@@ -57,6 +58,7 @@ async function initializeProfilPage() {
 
   document.getElementById('profile-username').textContent = userData.pseudo || "Nom inconnu";
   document.getElementById('profile-coins').textContent = userData.coins || 0;
+  renderPlayerLevel(userData);
   const stats = userData.stats || {};
   const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
   setText('stats-boosters-opened', stats.boostersOpened || 0);
@@ -172,6 +174,7 @@ function renderAchievements(userData) {
         const snap = await getDoc(doc(db, "users", globalUserData.uid));
         globalUserData = { ...globalUserData, ...snap.data() };
         document.getElementById('profile-coins').textContent = globalUserData.coins || 0;
+    renderPlayerLevel(globalUserData);
         renderAchievements(globalUserData);
       });
     }
@@ -227,9 +230,23 @@ function setupFriendsFeature() {
     globalUserData = { ...globalUserData, ...snap.data() };
     updateFriendCounters();
     document.getElementById('profile-coins').textContent = globalUserData.coins || 0;
+    renderPlayerLevel(globalUserData);
     if (openSection === 'friends') refreshFriendsList();
     if (openSection === 'requests') refreshFriendRequestsList();
   });
+}
+
+/** Niveau global : barre de progression + comment gagner de l'XP */
+function renderPlayerLevel(data) {
+  const box = document.getElementById('profile-level');
+  if (!box) return;
+  const lv = playerLevel(data), counters = xpCounters(data);
+  box.innerHTML = `
+    <div class="progress-head"><span><strong>Niveau ${lv.level}</strong> · ${lv.xp} XP</span><span>${lv.current} / ${lv.needed}</span></div>
+    <div class="xp-bar"><div class="xp-bar-fill" style="width:${lv.pct}%"></div></div>
+    <details class="xp-help"><summary>Comment gagner de l'XP ?</summary>
+      <ul>${XP_RULES.map(r => `<li>${r.label} : <strong>+${r.xp} XP</strong> <span>(${counters[r.key]})</span></li>`).join('')}</ul>
+    </details>`;
 }
 
 /** Suggestions d'amis (lues une fois à l'ouverture du profil, puis après chaque ajout) */
@@ -389,6 +406,7 @@ async function showFriendProfile(friendUid) {
     ${badges.length ? `<div class="profile-badges">${badges.map(a => `<span class="badge-medal tier-${a.tier}" title="${escapeHtml(a.title)}">${a.icon}</span>`).join('')}</div>` : ''}
 
     <div class="stats-grid compact">
+      <div class="stat-item"><span class="stat-value">${playerLevel(friend).level}</span><span class="stat-label">Niveau global</span></div>
       <div class="stat-item"><span class="stat-value">${level}</span><span class="stat-label">Niveau du Pass</span></div>
       <div class="stat-item"><span class="stat-value">${legendaries}</span><span class="stat-label">Légendaires</span></div>
       <div class="stat-item"><span class="stat-value">${stats.boostersOpened || 0}</span><span class="stat-label">Boosters ouverts</span></div>
@@ -405,18 +423,48 @@ async function showFriendProfile(friendUid) {
       ${V3_RELEASED ? `<div class="progress-head"><span>Album V3</span><span><strong>${v3}</strong> / ${allCardsV3.length}</span></div>${bar(v3, allCardsV3.length)}` : ""}
     </div>
 
-    <h4 class="friend-collection-title">Sa collection</h4>
-    ${ownedCards.length ? `<div class="friend-card-list">${ownedCards.map(card => `
-      <div class="friend-card-item">
-        <img src="${card.image}" alt="${escapeHtml(card.name)}">
-        ${escapeHtml(cardLabel(card))} <span>x${friend.collection[card.id].quantity}</span>
-      </div>`).join('')}</div>` : `<p class="empty-msg">Aucune carte</p>`}
+    <h4 class="friend-collection-title">Ses collections</h4>
+    <div class="friend-sets">${FRIEND_SETS().map(([label, cards], i) => `
+      <button class="friend-set-tab" data-set="${i}">Collection ${label} <span>${owned(cards)} / ${cards.length}</span></button>`).join('')}
+    </div>
+    <div id="friend-set-view"></div>
 
     <button class="profile-btn success" id="friend-modal-trade">🔄 Proposer un échange</button>
   `;
   document.getElementById('friend-modal-trade').onclick = () => { closeFriendModal(); startTradeWithFriend(friendUid, friend.pseudo); };
+  setupFriendSets(friend);
   document.getElementById('friend-modal').style.display = 'flex';
 }
+// Collections affichées dans le profil d'un ami (une de plus à chaque nouvelle série)
+const FRIEND_SETS = () => [['V1', allCardsV1], ['V2', allCardsV2], ...(V3_RELEASED ? [['V3', allCardsV3]] : [])];
+
+/** Onglets fermés : un clic ouvre la collection (toutes / possédées / manquantes), un 2e clic la ferme */
+function setupFriendSets(friend) {
+  const view = document.getElementById('friend-set-view');
+  const tabs = document.querySelectorAll('.friend-set-tab');
+  let openSet = null, filter = 'all';
+  const render = () => {
+    tabs.forEach(t => t.classList.toggle('active', Number(t.dataset.set) === openSet));
+    if (openSet === null) { view.innerHTML = ''; return; }
+    const cards = FRIEND_SETS()[openSet][1];
+    const qty = (c) => friend.collection?.[c.id]?.quantity || 0;
+    const shown = cards.filter(c => filter === 'all' || (filter === 'owned' ? qty(c) > 0 : qty(c) === 0));
+    const missing = cards.filter(c => qty(c) === 0).length;
+    view.innerHTML = `
+      <div class="friend-set-filters">
+        ${[['all', 'Toutes'], ['owned', 'Possédées'], ['missing', `Manquantes (${missing})`]].map(([k, l]) =>
+          `<button class="chip ${filter === k ? 'active' : ''}" data-filter="${k}">${l}</button>`).join('')}
+      </div>
+      ${shown.length ? `<div class="friend-card-list">${shown.map(c => `
+        <div class="friend-card-item ${qty(c) ? '' : 'missing'}">
+          <img src="${c.image}" alt="${escapeHtml(c.name)}" loading="lazy">
+          ${escapeHtml(c.name)} <span>${qty(c) ? 'x' + qty(c) : 'Manquante'}</span>
+        </div>`).join('')}</div>` : `<p class="empty-msg">${filter === 'missing' ? 'Collection complète ! 🎉' : 'Aucune carte'}</p>`}`;
+    view.querySelectorAll('[data-filter]').forEach(b => { b.onclick = () => { filter = b.dataset.filter; render(); }; });
+  };
+  tabs.forEach(t => { t.onclick = () => { const i = Number(t.dataset.set); openSet = openSet === i ? null : i; filter = 'all'; render(); }; });
+}
+
 function closeFriendModal() { document.getElementById('friend-modal').style.display = 'none'; }
 
 // ----------- ECHANGE (DEMANDE/NOTIF) -----------

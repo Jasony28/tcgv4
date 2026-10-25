@@ -200,6 +200,8 @@ export async function validateTrade(tradeId) {
         }
         // lastDeal : les règles Firestore vérifient que l'échange passe à « completed » dans la même transaction
         const lastDeal = { kind: 'trade', id: tradeId };
+        updatesA['stats.friendTrades'] = increment(1);
+        updatesB['stats.friendTrades'] = increment(1);
         if (Object.keys(updatesA).length) transaction.update(userARef, { ...updatesA, lastDeal });
         if (Object.keys(updatesB).length) transaction.update(userBRef, { ...updatesB, lastDeal });
         transaction.update(tradeRef, { status: "completed" });

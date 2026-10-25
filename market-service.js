@@ -160,6 +160,9 @@ export async function createListing(seller, { mode, item, startPrice, wantedCard
  */
 const auctionDeal = (id) => ({ kind: 'auction', id });
 
+/** « Meilleure vente / meilleur achat » : seulement si le prix bat le record */
+const bestStat = (userData, key, entry) => entry.price > (userData?.stats?.[key]?.price || 0) ? { [`stats.${key}`]: entry } : {};
+
 /** Mise sur une enchère en pièces. Renvoie le nouveau prix. */
 export async function placeBid(bidder, listingId, bidAmount) {
     const amount = Math.floor(bidAmount);
@@ -293,13 +296,16 @@ export async function finalizeExpiredListings(myUid = null) {
                 const buyerDoc = buyerRef ? await transaction.get(buyerRef) : null;
 
                 if (buyerDoc?.exists()) {
-                    // Enchère gagnée
-                    transaction.update(buyerRef, { [itemField(item)]: increment(item.quantity), lastDeal: auctionDeal(docSnap.id) });
-                    if (sellerDoc.exists()) transaction.update(sellerRef, { coins: increment(sellerProceeds(listing.currentPrice)), lastDeal: auctionDeal(docSnap.id) });
+                    // Enchère gagnée (statistiques des deux joueurs dans la même transaction)
+                    const entry = { cardId: item.cardId || null, name: describeItem(item).name, price: listing.currentPrice };
+                    transaction.update(buyerRef, { [itemField(item)]: increment(item.quantity), lastDeal: auctionDeal(docSnap.id), ...bestStat(buyerDoc.data(), 'bestPurchase', entry) });
+                    if (sellerDoc.exists()) transaction.update(sellerRef, { coins: increment(sellerProceeds(listing.currentPrice)), lastDeal: auctionDeal(docSnap.id),
+                        'stats.cardsSoldMarket': increment(1), ...bestStat(sellerDoc.data(), 'bestSale', entry) });
                     outcome = 'sold';
                 } else {
                     // Personne (ou acheteur supprimé) : l'objet revient au vendeur
-                    if (sellerDoc.exists()) transaction.update(sellerRef, { [itemField(item)]: increment(item.quantity), lastDeal: auctionDeal(docSnap.id) });
+                    if (sellerDoc.exists()) transaction.update(sellerRef, { [itemField(item)]: increment(item.quantity), lastDeal: auctionDeal(docSnap.id),
+                        ...(getListingType(listing) === 'auction' ? { 'stats.failedSales': increment(1) } : {}) });
                     outcome = 'returned';
                 }
                 transaction.update(listingRef, { status: 'ended' });

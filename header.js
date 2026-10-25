@@ -1,5 +1,6 @@
 // Fichier: header.js (Version avec création dynamique du header)
 import { openSettings } from './settings.js';
+import './chat.js';
 
 // Icônes SVG (trait, couleur = currentColor)
 const icon = (paths) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
@@ -21,7 +22,7 @@ const headerHTML = `
         <h1 class="game-title-small">JWBnDr</h1>
     </a>
     <div class="topbar-user">
-        <a href="profil.html" class="pseudo-chip" id="profil-link">${icons.profile}<span id="user-pseudo">...</span></a>
+        <a href="profil.html" class="pseudo-chip" id="profil-link">${icons.profile}<span id="user-pseudo">...</span><span class="level-chip" id="user-level" hidden></span></a>
         <div id="coin-balance"><span class="coin-icon"></span><span id="coin-amount">--</span></div>
         <button id="settings-button" class="round-icon-button" title="Paramètres" aria-label="Paramètres">${icons.settings}</button>
         <button id="logout-button" title="Déconnexion" aria-label="Déconnexion">${icons.logout}</button>
@@ -79,7 +80,7 @@ function loadHeader() {
 function setActiveNavLink() {
     const currentPage = window.location.pathname.split('/').pop();
     
-    if (currentPage === 'game.html') document.getElementById('nav-game')?.classList.add('active');
+    if (currentPage === 'game.html' || currentPage === 'inventaire.html') document.getElementById('nav-game')?.classList.add('active');
     if (currentPage === 'boutique.html') document.getElementById('nav-boutique')?.classList.add('active');
     if (currentPage === 'marche.html') document.getElementById('nav-marche')?.classList.add('active');
     if (currentPage === 'battlepass.html') document.getElementById('nav-battlepass')?.classList.add('active');

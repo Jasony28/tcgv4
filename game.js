@@ -222,6 +222,9 @@ function displayAvailableBoosters() {
     const boosterTotal = ['classic', 'legendary', 'v2', ...(V3_RELEASED ? ['v3', 'v3_legendary'] : [])]
         .reduce((sum, t) => sum + (userData.boosterInventory?.[t] || 0), 0);
     document.getElementById('inventory-empty').hidden = boosterTotal + displays.length > 0;
+    const pill = document.getElementById('inventory-count-pill');
+    pill.hidden = boosterTotal + displays.length === 0;
+    pill.textContent = boosterTotal + displays.length;
 
     // --- Bandeau « fin de série » ---
     const banner = document.getElementById('series-banner');

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Inventaire - JWBnDr</title>
+    <link rel="stylesheet" href="main.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0a1224">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="JWBnDr">
+    <link rel="apple-touch-icon" href="assets/logo/logo.png">
+    <link rel="icon" href="assets/logo/logo.png">
+</head>
+<body data-view="inventory">
+    <script src="splash.js"></script>
+   <header class="main-header"></header>
+    <main class="game-container">
+        <h2>Mon Inventaire</h2>
+        <nav class="booster-tabs" aria-label="Boosters">
+            <a href="game.html" class="booster-tab" data-view-link="daily">🎁 À ouvrir</a>
+            <a href="inventaire.html" class="booster-tab" data-view-link="inventory">📦 Inventaire <span id="inventory-count-pill" class="count-pill" hidden></span></a>
+        </nav>
+        <p class="page-subtitle">Tes boosters et displays gardés pour plus tard</p>
+        <p id="series-banner" class="series-banner" hidden></p>
+        <div id="booster-selection-container">
+            <div class="view-daily">
+            <h3 class="booster-section-title">🎁 Gratuits aujourd'hui</h3>
+            <div id="daily-booster-area" class="booster-option" style="display: none;">
+                <p id="booster-status">...</p>
+                <div id="booster-pack-wrapper">
+                    <img src="assets/booster/booster.png" alt="Booster du Jour" id="booster-pack-image">
+                    <span class="v2-tag v3-tag" id="daily-main-tag" hidden>V3</span>
+                </div>
+                <button id="keep-v1-button" class="keep-button">📦 Garder pour plus tard</button>
+            </div>
+            <div id="daily-v2-booster-area" class="booster-option daily-v2" style="display: none;">
+                <p id="booster-v2-status">...</p>
+                <div class="daily-pack-wrapper">
+                    <img src="assets/booster/booster.png" alt="Booster V2 du Jour" id="booster-v2-pack-image">
+                    <span class="v2-tag">V2</span>
+                </div>
+                <button id="keep-v2-button" class="keep-button">📦 Garder pour plus tard</button>
+            </div>
+
+            </div>
+            <div class="view-inventory">
+            <h3 class="booster-section-title">📦 Mon inventaire</h3>
+            <p id="inventory-empty" class="inventory-empty" hidden>Ton inventaire est vide. Garde tes boosters gratuits pour plus tard, ou achète-en à la boutique !</p>
+            <div id="display-inventory" class="display-inventory"></div>
+            <div id="classic-booster-area" class="booster-option" style="display: none;">
+                <p>Boosters Classiques</p>
+                <div class="inventory-booster-pack" id="classic-booster-opener">
+                    <img src="assets/booster/booster.png" alt="Booster Classique">
+                    <span class="inventory-count" id="classic-booster-count">x0</span>
+                </div>
+            </div>
+            <div id="legendary-booster-area" class="booster-option" style="display: none;">
+                <p>Boosters Légendaires</p>
+                <div class="inventory-booster-pack" id="legendary-booster-opener">
+                    <img src="assets/booster/booster.png" alt="Booster Légendaire"> 
+                    <span class="inventory-count" id="legendary-booster-count">x0</span>
+                </div>
+            </div>
+            <div id="v2-booster-area" class="booster-option" style="display: none;">
+                <p>Boosters V2</p>
+                <div class="inventory-booster-pack" id="v2-booster-opener">
+                    <img src="assets/booster/booster.png" alt="Booster V2">
+                    <span class="v2-tag">V2</span>
+                    <span class="inventory-count" id="v2-booster-count">x0</span>
+                </div>
+            </div>
+            <div id="v3-booster-area" class="booster-option" style="display: none;">
+                <p>Boosters V3</p>
+                <div class="inventory-booster-pack" id="v3-booster-opener">
+                    <img src="assets/booster/booster.png" alt="Booster V3">
+                    <span class="v2-tag v3-tag">V3</span>
+                    <span class="inventory-count" id="v3-booster-count">x0</span>
+                </div>
+            </div>
+            <div id="v3_legendary-booster-area" class="booster-option" style="display: none;">
+                <p>Boosters Légendaires V3</p>
+                <div class="inventory-booster-pack" id="v3_legendary-booster-opener">
+                    <img src="assets/booster/booster.png" alt="Booster Légendaire V3">
+                    <span class="v2-tag v3-tag">V3 ★</span>
+                    <span class="inventory-count" id="v3_legendary-booster-count">x0</span>
+                </div>
+            </div>
+            </div>
+            <a href="boutique.html" class="shop-cta">🛒 Plus de boosters à la boutique</a>
+        </div>
+        <p id="reveal-status" class="reveal-status" style="display:none;"></p>
+        <div id="card-reveal-area" class="card-grid" style="display:none;"></div>
+    </main>
+    <div id="toast-container"></div>
+    <div id="custom-modal" style="display:none;">
+      <div class="modal-content">
+        <span class="close-btn" id="custom-modal-close">&times;</span>
+        <div id="custom-modal-title"></div>
+        <div id="custom-modal-message"></div>
+        <div id="custom-modal-actions"></div>
+      </div>
+    </div>
+    <script type="module" src="header.js"></script>
+    <script type="module" src="game.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js');
+            });
+        }
+    </script>
+</body>
+</html>

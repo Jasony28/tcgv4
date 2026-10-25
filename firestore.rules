@@ -107,7 +107,20 @@ service cloud.firestore {
       allow update: if isSignedIn() && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
     }
 
-    // 4. TOUT LE RESTE : interdit
+    // 4. CHAT GÉNÉRAL — lecture par les joueurs connectés ; un message = mon identifiant, mon vrai pseudo,
+    //    1 à 200 caractères, horodaté par le serveur. Ni modification ni suppression.
+    match /chat/{messageId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'pseudo', 'text', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 200
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.pseudo == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.pseudo;
+    }
+
+    // 5. TOUT LE RESTE : interdit
     match /{document=**} {
       allow read, write: if false;
     }

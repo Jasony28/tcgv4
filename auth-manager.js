@@ -5,6 +5,7 @@ import { db } from './firebase-config.js';
 import { updateQuestProgress } from './quest-manager.js';
 import { getAchievementsStatus } from './achievements-config.js';
 import { showToast } from './toast.js';
+import { playerLevel } from './player-level.js';
 
 const auth = getAuth();
 
@@ -82,6 +83,11 @@ function updateHeaderUI(userData) {
 
     if (pseudoEl && userData?.pseudo) {
         pseudoEl.textContent = userData.pseudo;
+    }
+    const levelEl = document.getElementById('user-level');
+    if (levelEl && userData) {
+        levelEl.textContent = `Nv ${playerLevel(userData).level}`;
+        levelEl.hidden = false;
     }
     if (coinAmountEl && userData?.coins !== undefined) {
         coinAmountEl.textContent = userData.coins;
