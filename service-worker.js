@@ -1,6 +1,6 @@
 // Fichier: service-worker.js
 
-const CACHE_NAME = 'tcg-gemini-cache-v8.4.0';
+const CACHE_NAME = 'tcg-gemini-cache-v8.5.0';
 
 // Chemins relatifs à l'emplacement du service worker : fonctionne à la racine
 // du domaine comme dans un sous-dossier (ex: GitHub Pages /TCG-jason/).

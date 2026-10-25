@@ -2157,3 +2157,59 @@ body.stage-open { overflow: hidden; }
     #toast-container { bottom: calc(var(--tabbar-h) + 30px); }
 }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ----------------------------------------
+   15. Ordinateur : menu dans la barre du haut, notifications en bas à droite
+   ---------------------------------------- */
+@media (min-width: 1024px) {
+    :root { --topbar-h: 68px; }
+    .main-header { padding-left: 28px; padding-right: 28px; z-index: 210; }
+    .tabbar {
+        top: var(--safe-top); bottom: auto; left: 50%; transform: translateX(-50%);
+        z-index: 220; width: auto; max-width: none; height: var(--topbar-h);
+        display: flex; align-items: center; gap: 4px; padding: 0;
+        background: transparent; border: none; border-radius: 0; box-shadow: none;
+        -webkit-backdrop-filter: none; backdrop-filter: none;
+    }
+    .nav-dropdown { height: auto; }
+    .nav-link { flex-direction: row; gap: 8px; height: 42px; padding: 0 16px; border-radius: 12px; font-size: .95rem; }
+    .nav-link svg { width: 20px; height: 20px; }
+    .nav-link:hover { background: rgba(255, 255, 255, 0.06); color: var(--text); }
+    .nav-link.active { background: rgba(255, 194, 61, 0.12); }
+    .nav-link.active svg { transform: none; }
+    .nav-link.active::before { top: auto; bottom: -13px; border-radius: 4px 4px 0 0; }
+    .dropdown-menu { bottom: auto; top: calc(100% + 10px); }
+    body { padding-bottom: 40px; }
+    #toast-container { left: auto; right: 24px; bottom: 24px; transform: none; width: 380px; }
+    .settings-overlay { align-items: center; }
+    .settings-sheet { border-radius: 22px; }
+}
+/* Écran moyen : le menu ne tient pas avec le pseudo et les pièces → icônes seules */
+@media (min-width: 1024px) and (max-width: 1279px) {
+    .nav-link span { display: none; }
+    .nav-link { padding: 0 14px; }
+}
+@media (min-width: 1024px) {
+    /* Page Booster : grille centrée, boosters côte à côte */
+    #booster-selection-container {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 340px)); justify-content: center;
+        gap: 18px; width: 100%; max-width: 1100px; margin: 0 auto; align-items: stretch;
+    }
+    #booster-selection-container > .booster-option { max-width: none; width: 100%; margin: 0; }
+    #booster-selection-container > .booster-section-title,
+    #booster-selection-container > .inventory-empty,
+    #booster-selection-container > .shop-cta { grid-column: 1 / -1; max-width: none; }
+    #booster-selection-container > .display-inventory {
+        grid-column: 1 / -1; max-width: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    }
+    .series-banner { max-width: 760px; }
+}
+@media (min-width: 1024px) {
+    /* Boutique : packs, displays et boosters en grille */
+    .shop-packs, .shop-boosters { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+    /* Hôtel des Ventes : bouton de création à taille normale */
+    .create-listing-button { max-width: 340px; margin-left: auto; margin-right: auto; display: block; }
+}
+@media (min-width: 1024px) {
+    .shop-cards { max-width: 820px; margin-left: auto; margin-right: auto; }
+}
