@@ -8,6 +8,7 @@
     var KEY = 'splash-start';
     var CARDS = ['assets/cards3/V3_010.webp', 'assets/cards3/V3_021.webp', 'assets/cards3/V3_034.webp'];
 
+    try { if (JSON.parse(localStorage.getItem('tcg-settings') || '{}').splash === false) return; } catch (e) { /* réglage illisible */ }
     var start, now = Date.now();
     try {
         start = Number(sessionStorage.getItem(KEY));

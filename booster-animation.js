@@ -11,7 +11,8 @@ const rarityKey = (r) => r.replace(/é/g, 'e'); // classe CSS : Commune, Rare, e
 const PACK_CLASS = { classic: '', daily: '', v2: 'v2', daily_v2: 'v2', v3: 'v3', legendary: 'legendary', v3_legendary: 'legendary' };
 
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
-const vibrate = (pattern) => { try { navigator.vibrate?.(pattern); } catch { /* pas de vibreur */ } };
+import { play, vibrate } from './sfx.js';
+const RARITY_SOUND = { 'Commune': 'common', 'Rare': 'rare', 'epique': 'epic', 'Légendaire': 'legendary' };
 
 /** Gerbe de particules centrée dans `host` */
 function burst(host, { count = 24, color = '#ffd76a', spread = 220, size = 8 } = {}) {
@@ -105,6 +106,7 @@ export function playBoosterOpening({ cards, isNew, boosterType }) {
             await wait(650);
             if (finished) return;
             pack.classList.add('torn');
+            play('open');
             flash(stage, best === 'Légendaire' ? '#ffe08a' : '#ffffff');
             burst(stage, { count: 30, color: { 'Légendaire': '#ffc23d', 'epique': '#c27bff' }[best] || '#9ccaff', spread: 260 });
             await wait(550);
@@ -165,10 +167,12 @@ export function playBoosterOpening({ cards, isNew, boosterType }) {
                 // Suspense avant le retournement pour les cartes rares
                 if (rarity === 'Légendaire') {
                     cardEl.classList.add('charging', 'charging-gold');
+                    play('charge');
                     vibrate([40, 60, 40, 60, 80]);
                     await wait(1100);
                 } else if (rarity === 'epique') {
                     cardEl.classList.add('charging', 'charging-purple');
+                    play('charge');
                     vibrate(50);
                     await wait(550);
                 }
@@ -176,6 +180,9 @@ export function playBoosterOpening({ cards, isNew, boosterType }) {
                 cardEl.classList.remove('charging', 'charging-gold', 'charging-purple');
                 cardEl.classList.add('flipped');
                 stage.dataset.reveal = rarityKey(rarity);
+                play('flip');
+                setTimeout(() => play(RARITY_SOUND[rarity]), 120);
+                if (entry.isNew) setTimeout(() => play('newcard'), 450);
 
                 if (rarity === 'Légendaire') {
                     flash(stage, '#ffe08a');

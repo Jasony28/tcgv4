@@ -1,6 +1,7 @@
 // Fichier: boutique.js — interface de la boutique (la logique est dans shop-service.js)
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
+import { play } from './sfx.js';
 import { protectPage } from './auth-manager.js';
 import { showToast, showConfirmDialog } from './toast.js';
 import { updateQuestProgress } from './quest-manager.js';
@@ -221,6 +222,7 @@ async function purchase({ title, message, action, success }) {
     try {
         const result = await action();
         showToast('success', success(result), 4500);
+        play('coins');
         await updateQuestProgress('shop_buy');
         return result;
     } catch (e) {

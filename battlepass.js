@@ -1,5 +1,6 @@
 import { doc, getDoc, runTransaction, increment } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
+import { play } from './sfx.js';
 import { protectPage } from './auth-manager.js';
 import {
     fullRewardsList, questsConfig, dailyQuestPool, getDailyQuestIds, getLevel,
@@ -195,6 +196,7 @@ async function claimRewards(rewards) {
 
         const names = rewards.map(r => r.type === 'random_card' ? `${drawnCards[r.step].name} (${r.description})` : r.description);
         showToast('success', `Récupéré : ${names.join(', ')}`, 4500);
+        play('coins');
     } catch (error) {
         showToast('error', error.message);
     } finally {

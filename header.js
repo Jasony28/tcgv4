@@ -1,4 +1,5 @@
 // Fichier: header.js (Version avec création dynamique du header)
+import { openSettings } from './settings.js';
 
 // Icônes SVG (trait, couleur = currentColor)
 const icon = (paths) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
@@ -9,6 +10,7 @@ const icons = {
     pass: icon('<path d="M8 21h8M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>'),
     profile: icon('<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>'),
     shop: icon('<path d="M5 8h14l-1.2 11.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>'),
+    settings: icon('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
     logout: icon('<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"/><path d="M10 17l-5-5 5-5M5 12h11"/>')
 };
 
@@ -21,6 +23,7 @@ const headerHTML = `
     <div class="topbar-user">
         <a href="profil.html" class="pseudo-chip" id="profil-link">${icons.profile}<span id="user-pseudo">...</span></a>
         <div id="coin-balance"><span class="coin-icon"></span><span id="coin-amount">--</span></div>
+        <button id="settings-button" class="round-icon-button" title="Paramètres" aria-label="Paramètres">${icons.settings}</button>
         <button id="logout-button" title="Déconnexion" aria-label="Déconnexion">${icons.logout}</button>
     </div>
 `;
@@ -50,6 +53,7 @@ function loadHeader() {
         tabbar.className = 'tabbar';
         tabbar.innerHTML = tabbarHTML;
         document.body.appendChild(tabbar);
+        document.getElementById('settings-button').addEventListener('click', openSettings);
 
         // Logique pour le menu déroulant
         const dropdownBtn = document.getElementById('collection-dropdown-btn');

@@ -1,5 +1,7 @@
 // toast.js
+import { play } from './sfx.js';
 export function showToast(type, message, duration = 3000) {
+    play(type === 'success' ? 'success' : type === 'error' ? 'error' : 'tap');
     const container = document.getElementById('toast-container');
     if (!container) return;
     const toast = document.createElement('div');
