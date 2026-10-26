@@ -53,7 +53,7 @@ function itemVisual(item, extraClass = '') {
             ${item.boosterType === 'v2' ? '<span class="v2-tag">V2</span>' : ''}
             ${item.quantity > 1 ? `<span class="card-quantity">x${item.quantity}</span>` : ''}</div>`;
     }
-    return `<div class="card ${rarityClass(info.rarity)} ${extraClass}"><img class="card-image" src="${info.image}" alt="${escapeHtml(info.name)}">
+    return `<div class="card ${rarityClass(info.rarity)} ${extraClass}"><img loading="lazy" decoding="async" class="card-image" src="${info.image}" alt="${escapeHtml(info.name)}">
         ${item.quantity > 1 ? `<span class="card-quantity">x${item.quantity}</span>` : ''}</div>`;
 }
 
@@ -215,7 +215,7 @@ function renderGrid() {
         tile.className = `listing-tile ${type} ${mine ? 'mine' : ''} ${fulfil ? 'can-fulfill' : ''}`;
         const priceLine = type === 'auction'
             ? `<span class="listing-price"><span class="coin-icon"></span>${listing.currentPrice}</span>`
-            : `<span class="listing-wanted">Contre ${(listing.wantedCardIds || []).map(id => `<img src="${findCard(id)?.image || ''}" alt="">`).join('')}</span>`;
+            : `<span class="listing-wanted">Contre ${(listing.wantedCardIds || []).map(id => `<img loading="lazy" src="${findCard(id)?.image || ''}" alt="">`).join('')}</span>`;
         tile.innerHTML = `
             <span class="listing-type-chip">${type === 'auction' ? '💰 Enchère' : '🔄 Échange'}</span>
             ${seriesBadge(item)}
@@ -290,7 +290,7 @@ function renderListingModal(listing) {
             const have = me.collection?.[id]?.quantity || 0;
             return `
                 <div class="wanted-card ${have > 0 ? 'have' : ''}">
-                    <div class="card ${rarityClass(card?.rarity)}"><img class="card-image" src="${card?.image || ''}" alt=""></div>
+                    <div class="card ${rarityClass(card?.rarity)}"><img loading="lazy" decoding="async" class="card-image" src="${card?.image || ''}" alt=""></div>
                     <span class="wanted-name">${escapeHtml(cardLabel(card) || id)}</span>
                     <span class="wanted-have">${have > 0 ? `Tu en as ${have}` : 'Tu ne l’as pas'}</span>
                     ${mine ? '' : `<button class="give-button" data-card="${id}" ${have > 0 ? '' : 'disabled'}>Donner</button>`}
@@ -423,19 +423,19 @@ function renderCreate() {
         : `<input type="search" class="picker-search" id="card-search" placeholder="Chercher dans tes doublons…" value="${escapeHtml(draft.cardSearch)}">
            <div class="pick-grid">${dupes.map(c => `
             <button class="pick-tile ${draft.cardId === c.id ? 'selected' : ''}" data-card="${c.id}">
-                <img src="${c.image}" alt=""><span>${escapeHtml(cardLabel(c))}</span><small>x${me.collection[c.id].quantity}</small>
+                <img loading="lazy" src="${c.image}" alt=""><span>${escapeHtml(cardLabel(c))}</span><small>x${me.collection[c.id].quantity}</small>
             </button>`).join('')}</div>`;
 
     const boosterPicker = `<div class="pick-row">${Object.entries(BOOSTER_INFO).map(([t, b]) => {
         const n = me.boosterInventory?.[t] || 0;
         return `<button class="pick-tile booster ${t} ${draft.boosterType === t ? 'selected' : ''}" data-booster="${t}" ${n ? '' : 'disabled'}>
-            <img src="assets/booster/booster.png" alt=""><span>${b.name}</span><small>x${n}</small></button>`;
+            <img src="assets/booster/booster.webp" alt=""><span>${b.name}</span><small>x${n}</small></button>`;
     }).join('')}</div>`;
 
     const displayPicker = `<div class="pick-row">${Object.entries(DISPLAY_INFO).map(([t, d]) => {
         const n = me.displayInventory?.[t] || 0;
         return `<button class="pick-tile booster ${t} ${draft.displayType === t ? 'selected' : ''}" data-display="${t}" ${n ? '' : 'disabled'}>
-            <img src="assets/booster/booster.png" alt=""><span>${d.name}</span><small>x${n}</small></button>`;
+            <img src="assets/booster/booster.webp" alt=""><span>${d.name}</span><small>x${n}</small></button>`;
     }).join('')}</div>`;
 
     const wantList = ALL_CARDS
@@ -475,7 +475,7 @@ function renderCreate() {
                 <div class="pick-grid wanted-picker">${wantList.map(c => {
                     const have = (me.collection?.[c.id]?.quantity || 0) > 0;
                     return `<button class="pick-tile ${draft.wanted.includes(c.id) ? 'selected' : ''}" data-want="${c.id}">
-                        <img src="${c.image}" alt=""><span>${escapeHtml(cardLabel(c))}</span><small>${have ? 'possédée' : '<b>manquante</b>'}</small></button>`;
+                        <img loading="lazy" src="${c.image}" alt=""><span>${escapeHtml(cardLabel(c))}</span><small>${have ? 'possédée' : '<b>manquante</b>'}</small></button>`;
                 }).join('')}</div>
             `}
         </div>

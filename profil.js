@@ -644,7 +644,7 @@ function renderYourOffer() {
     const row = document.createElement('div');
     row.className = 'trade-booster-row';
     row.innerHTML = `
-      <img src="assets/booster/booster.png" class="booster-thumb ${type}" alt="">
+      <img src="assets/booster/booster.webp" class="booster-thumb ${type}" alt="">
       <span class="trade-card-name">${label}<small>x${have}</small></span>
       <button class="minus-btn">-</button>
       <span class="trade-offer-qty">${localBoosters[type]}</span>
@@ -768,7 +768,7 @@ function renderOtherOffer(offer) {
       return `<div><img src="${card?.image || ''}" alt=""><span class="trade-card-name">${escapeHtml(cardLabel(card) || cardId)}</span><strong>x${qty}</strong></div>`;
     }),
     ...Object.entries(offer.boosters).filter(([, n]) => n > 0).map(([type, n]) =>
-      `<div><img src="assets/booster/booster.png" class="booster-thumb ${type}" alt=""><span class="trade-card-name">${BOOSTER_LABELS[type]}</span><strong>x${n}</strong></div>`)
+      `<div><img src="assets/booster/booster.webp" class="booster-thumb ${type}" alt=""><span class="trade-card-name">${BOOSTER_LABELS[type]}</span><strong>x${n}</strong></div>`)
   ];
   container.innerHTML = rows.length ? rows.join('') : "<span class='empty-msg'>Rien pour l'instant…</span>";
 }

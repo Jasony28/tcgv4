@@ -80,10 +80,10 @@
     var cards = '';
     for (var i = 0; i < CARDS.length; i++) {
         cards += '<div class="sp-card sp-c' + i + '">' + (i === 1 ? '<span class="sp-glow"></span>' : '') +
-            '<div class="sp-flip"><img src="assets/card-back/dos.png" alt=""><img class="sp-front" src="' + CARDS[i] + '" alt=""></div></div>';
+            '<div class="sp-flip"><img src="assets/card-back/dos.webp" alt=""><img class="sp-front" src="' + CARDS[i] + '" alt=""></div></div>';
     }
     el.innerHTML = '<div class="sp-rays"></div>' +
-        '<div class="sp-stage">' + cards + '<img class="sp-logo" src="assets/logo/logo.png" alt=""></div>' +
+        '<div class="sp-stage">' + cards + '<img class="sp-logo" src="assets/logo/logo.webp" alt=""></div>' +
         '<div class="sp-title">TCG JWBnDr</div>' +
         '<div class="sp-sub">✨ Série V3 disponible</div>' +
         '<div class="sp-bar"><i></i></div>' +

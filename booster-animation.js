@@ -78,8 +78,8 @@ export function playBoosterOpening({ cards, isNew, boosterType }) {
             <div class="stage-hint">Touche le booster pour l'ouvrir</div>
             <div class="stage-pack ${PACK_CLASS[boosterType] || ''}">
                 <div class="pack-glow"></div>
-                <img class="pack-top" src="assets/booster/booster.png" alt="">
-                <img class="pack-bottom" src="assets/booster/booster.png" alt="">
+                <img class="pack-top" src="assets/booster/booster.webp" alt="">
+                <img class="pack-bottom" src="assets/booster/booster.webp" alt="">
             </div>
         `;
         document.body.appendChild(stage);
@@ -125,7 +125,7 @@ export function playBoosterOpening({ cards, isNew, boosterType }) {
             el.className = `flip-card rarity-${rarityKey(entry.card.rarity)}`;
             el.innerHTML = `
                 <div class="flip-inner">
-                    <div class="flip-face flip-back"><img src="assets/card-back/dos.png" alt=""></div>
+                    <div class="flip-face flip-back"><img src="assets/card-back/dos.webp" alt=""></div>
                     <div class="flip-face flip-front">
                         <img src="${entry.card.image}" alt="${entry.card.name}">
                         ${entry.isNew ? '<span class="new-ribbon big">Nouvelle !</span>' : ''}

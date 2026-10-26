@@ -47,6 +47,32 @@ function buildUi() {
     bubble.onclick = () => (panel.hidden ? open() : close());
     panel.querySelector('.chat-close').onclick = close;
     panel.querySelector('.chat-form').onsubmit = send;
+    const input = panel.querySelector('input');
+    input.addEventListener('focus', () => setTimeout(fitToKeyboard, 250));
+    input.addEventListener('blur', () => setTimeout(fitToKeyboard, 250));
+    window.visualViewport?.addEventListener('resize', fitToKeyboard);
+    window.visualViewport?.addEventListener('scroll', fitToKeyboard);
+}
+
+/**
+ * Clavier du téléphone ouvert : le chat se place juste au-dessus et prend la hauteur visible
+ * (visualViewport = la partie de l'écran que le clavier ne cache pas).
+ */
+function fitToKeyboard() {
+    const vv = window.visualViewport;
+    if (!panel || panel.hidden || !vv) return;
+    const keyboard = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    const typing = keyboard > 80 || document.activeElement === panel.querySelector('input') && vv.height < window.screen.height * 0.7;
+    panel.classList.toggle('keyboard', typing);
+    if (typing) {
+        panel.style.bottom = `${keyboard + 8}px`;
+        panel.style.height = `${Math.min(480, vv.height - 16)}px`;
+    } else {
+        panel.style.bottom = '';
+        panel.style.height = '';
+    }
+    const list = panel.querySelector('.chat-list');
+    list.scrollTop = list.scrollHeight;
 }
 
 function open() {
@@ -64,6 +90,8 @@ function open() {
 
 function close() {
     panel.hidden = true;
+    panel.classList.remove('keyboard');
+    panel.style.bottom = panel.style.height = '';
     bubble.classList.remove('open');
     stopFull?.();
     stopFull = null;

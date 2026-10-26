@@ -1,6 +1,9 @@
 // Fichier: service-worker.js
 
-const CACHE_NAME = 'tcg-gemini-cache-v8.8.0';
+const CACHE_NAME = 'tcg-gemini-cache-v9.0.0';
+// Images (cartes, boosters…) : cache à part, conservé entre les mises à jour du jeu.
+// Changer ce nom force le re-téléchargement des images (à faire si une image change sans changer de nom).
+const IMAGE_CACHE = 'tcg-images-v2';
 
 // Chemins relatifs à l'emplacement du service worker : fonctionne à la racine
 // du domaine comme dans un sous-dossier (ex: GitHub Pages /TCG-jason/).
@@ -51,8 +54,8 @@ const urlsToCache = [
     './quest-manager.js',
     './stats-manager.js',
     './toast.js',
-    './assets/card-back/dos.png',
-    './assets/logo/logo.png'
+    './assets/card-back/dos.webp',
+    './assets/logo/logo.webp'
 ];
 
 self.addEventListener('install', event => {
@@ -70,24 +73,35 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
     event.waitUntil(caches.keys().then(cacheNames => {
         return Promise.all(
-            cacheNames.filter(name => name !== CACHE_NAME).map(name => caches.delete(name))
+            cacheNames.filter(name => name !== CACHE_NAME && name !== IMAGE_CACHE).map(name => caches.delete(name))
         );
     }).then(() => self.clients.claim()));
 });
 
-// Réseau d'abord (pour toujours avoir la dernière version du jeu), cache en secours hors-ligne.
 // Seules les requêtes GET de notre propre site passent par le cache (Firebase/Google restent directs).
+//  - Images : cache d'abord → affichage instantané, téléchargées une seule fois.
+//  - Pages et code : réseau d'abord (toujours la dernière version), mais si le réseau met plus de
+//    4 secondes on affiche la version en cache pour ne pas bloquer le joueur.
 self.addEventListener('fetch', event => {
     const request = event.request;
-    if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
+    const url = new URL(request.url);
+    if (request.method !== 'GET' || url.origin !== self.location.origin) return;
 
-    event.respondWith(
-        fetch(request).then(response => {
-            if (response.ok) {
-                const copy = response.clone();
-                caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
-            }
+    if (url.pathname.includes('/assets/')) {
+        event.respondWith(caches.open(IMAGE_CACHE).then(cache => cache.match(request).then(hit => hit || fetch(request).then(response => {
+            if (response.ok) cache.put(request, response.clone());
             return response;
-        }).catch(() => caches.match(request))
-    );
+        }))));
+        return;
+    }
+
+    const network = fetch(request).then(response => {
+        if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+        }
+        return response;
+    });
+    const slow = new Promise(resolve => setTimeout(resolve, 4000)).then(() => caches.match(request)).then(hit => hit || network);
+    event.respondWith(Promise.race([network.catch(() => caches.match(request)), slow]));
 });

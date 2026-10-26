@@ -54,11 +54,11 @@ export const getListingType = (listing) => listing.type || 'auction';
 export function describeItem(item) {
     if (item.type === 'booster') {
         const info = BOOSTER_INFO[item.boosterType] || { name: 'Booster' };
-        return { name: info.name, image: 'assets/booster/booster.png', rarity: null, boosterType: item.boosterType };
+        return { name: info.name, image: 'assets/booster/booster.webp', rarity: null, boosterType: item.boosterType };
     }
     if (item.type === 'display') {
         const info = DISPLAY_INFO[item.displayType] || { name: 'Display' };
-        return { name: info.name, image: 'assets/booster/booster.png', rarity: null, boosterType: item.displayType };
+        return { name: info.name, image: 'assets/booster/booster.webp', rarity: null, boosterType: item.displayType };
     }
     const card = findCard(item.cardId);
     return { name: card ? cardLabel(card) : item.cardId, image: card?.image || '', rarity: card?.rarity || 'Commune' };

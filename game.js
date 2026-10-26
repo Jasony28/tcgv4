@@ -207,7 +207,7 @@ function displayAvailableBoosters() {
     displayBox.innerHTML = displays.map(([t, d]) => `
         <div class="display-card ${d.boosterType}">
             <div class="display-visual ${d.boosterType}">
-                <img src="assets/booster/booster.png" alt=""><img src="assets/booster/booster.png" alt=""><img src="assets/booster/booster.png" alt="">
+                <img src="assets/booster/booster.webp" alt=""><img src="assets/booster/booster.webp" alt=""><img src="assets/booster/booster.webp" alt="">
             </div>
             <div class="display-card-info">
                 <strong>${d.name} <span class="inventory-count-inline">x${userData.displayInventory[t]}</span></strong>

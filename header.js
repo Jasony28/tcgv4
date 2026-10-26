@@ -18,7 +18,7 @@ const icons = {
 // Barre du haut (dans <header class="main-header">)
 const headerHTML = `
     <a href="game.html" class="brand">
-        <img src="assets/logo/logo.png" alt="">
+        <img src="assets/logo/logo.webp" alt="">
         <h1 class="game-title-small">JWBnDr</h1>
     </a>
     <div class="topbar-user">

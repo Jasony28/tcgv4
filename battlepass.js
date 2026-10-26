@@ -74,7 +74,7 @@ function displayRewardTrack() {
             <span class="level-number">Niveau ${reward.step}</span>
             <div class="reward-icon">${REWARD_ICONS[reward.type] || ''}</div>
             <p class="reward-text">${reward.description}</p>
-            <div class="action-area">${state === 'unlocked' ? '<button class="claim-button">Réclamer</button>' : ''}</div>
+            <div class="action-area">${state === 'unlocked' ? '<button class="claim-button">Réclamer</button>' : state === 'claimed' ? '<span class="claimed-label">✓ Réclamé</span>' : ''}</div>
         `;
         trackContainer.appendChild(cardElement);
 
@@ -194,6 +194,9 @@ async function claimRewards(rewards) {
             transaction.update(userRef, updates);
         });
 
+        // Affichage mis à jour tout de suite (sans attendre le rechargement du compte)
+        for (const r of rewards) bp.claimedRewards[r.step] = true;
+        renderAll();
         const names = rewards.map(r => r.type === 'random_card' ? `${drawnCards[r.step].name} (${r.description})` : r.description);
         showToast('success', `Récupéré : ${names.join(', ')}`, 4500);
         play('coins');
@@ -202,7 +205,7 @@ async function claimRewards(rewards) {
     } finally {
         claiming = false;
         claimAllButton.disabled = false;
-        await refresh();
+        await refresh().catch(() => { /* hors ligne : l'affichage local est déjà à jour */ });
     }
 }
 

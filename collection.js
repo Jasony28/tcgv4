@@ -81,6 +81,8 @@ function displayCollection(userCollection, cardsSet) {
 
         if (owned) {
             const cardImage = document.createElement('img');
+            cardImage.loading = 'lazy';
+            cardImage.decoding = 'async';
             cardImage.className = 'card-image';
             cardImage.src = card.image;
             cardImage.alt = card.name;

@@ -62,7 +62,7 @@ function renderDeal() {
     $('daily-deal').innerHTML = `
         <span class="deal-tag">⚡ Offre du jour · -${Math.round(deal.discount * 100)} %</span>
         <div class="booster-item ${deal.type} deal">
-            <img src="assets/booster/booster.png" alt="">
+            <img src="assets/booster/booster.webp" alt="">
             <div class="booster-item-info">
                 <strong>${def.name}</strong>
                 <span>${def.description}</span>
@@ -107,7 +107,7 @@ function renderDisplays() {
         el.className = `booster-item display-item ${d.boosterType} ${soldOut ? 'sold' : ''}`;
         el.innerHTML = `
             <div class="display-visual ${d.boosterType}">
-                <img src="assets/booster/booster.png" alt=""><img src="assets/booster/booster.png" alt=""><img src="assets/booster/booster.png" alt="">
+                <img src="assets/booster/booster.webp" alt=""><img src="assets/booster/booster.webp" alt=""><img src="assets/booster/booster.webp" alt="">
             </div>
             <div class="booster-item-info">
                 <strong>${d.name}</strong>
@@ -157,7 +157,7 @@ function renderBoosters() {
         const item = document.createElement('div');
         item.className = `booster-item ${type} ${soldOut ? 'sold' : ''}`;
         item.innerHTML = `
-            <img src="assets/booster/booster.png" alt="${def.name}">
+            <img src="assets/booster/booster.webp" alt="${def.name}">
             <div class="booster-item-info">
                 <strong>${def.name}${deal.type === type ? ' <span class="deal-mini">-30 %</span>' : ''}</strong>
                 <span>${def.description}</span>

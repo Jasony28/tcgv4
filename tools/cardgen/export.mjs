@@ -17,9 +17,10 @@ for (const c of cards) {
     let image, upcoming = false;
     if (existsSync(png)) {
         const img = await loadImage(png);
-        const canvas = createCanvas(img.width, img.height);
-        canvas.getContext('2d').drawImage(img, 0, 0);
-        writeFileSync(`${GAME}/assets/cards3/${c.id}.webp`, await canvas.encode('webp', 88));
+        const w = 720, h = Math.round(img.height * w / img.width); // même taille que les autres cartes (optimize-images.mjs)
+        const canvas = createCanvas(w, h);
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        writeFileSync(`${GAME}/assets/cards3/${c.id}.webp`, await canvas.encode('webp', 82));
         image = `assets/cards3/${c.id}.webp`;
     } else {
         image = `assets/cards3/${c.id}.svg`;

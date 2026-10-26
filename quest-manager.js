@@ -10,19 +10,26 @@ import { showToast } from './toast.js';
  * Math.round : lors d'un changement d'heure (été/hiver) l'écart entre deux jours vaut 23h ou 25h,
  * l'ancien test "=== 1" cassait alors la série.
  */
+/**
+ * Jour au format « AAAA-MM-JJ ». Les anciennes dates (« Mon Oct 26 2026 », illisibles sur certains
+ * téléphones comme Safari/iPhone, ce qui bloquait la série à 1) sont converties.
+ */
+export function toDayKey(d) {
+  if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  const t = new Date(d);
+  if (isNaN(t)) return null;
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+}
+const dayNumber = (key) => { const [y, m, d] = key.split('-').map(Number); return Date.UTC(y, m - 1, d) / 86400000; };
+
+/** Plus longue série de jours consécutifs */
 export function computeMaxStreak(dates) {
-  if (!Array.isArray(dates) || dates.length === 0) return 0;
-  const sorted = [...dates].sort((a, b) => new Date(a) - new Date(b));
-  let maxStreak = 1;
-  let currentStreak = 1;
-  for (let i = 1; i < sorted.length; i++) {
-    const diffDays = Math.round((new Date(sorted[i]) - new Date(sorted[i - 1])) / (1000 * 60 * 60 * 24));
-    if (diffDays === 1) {
-      currentStreak++;
-      maxStreak = Math.max(maxStreak, currentStreak);
-    } else if (diffDays > 1) {
-      currentStreak = 1;
-    }
+  const days = [...new Set((Array.isArray(dates) ? dates : []).map(toDayKey).filter(Boolean))].map(dayNumber).sort((a, b) => a - b);
+  if (!days.length) return 0;
+  let maxStreak = 1, currentStreak = 1;
+  for (let i = 1; i < days.length; i++) {
+    currentStreak = days[i] - days[i - 1] === 1 ? currentStreak + 1 : 1;
+    maxStreak = Math.max(maxStreak, currentStreak);
   }
   return maxStreak;
 }
@@ -68,9 +75,9 @@ function advanceWeeklyQuest(questId, questDef, bp, value, extra) {
       break;
     }
     case 'q14': {
-      const progressSet = new Set(Array.isArray(questProg.progress) ? questProg.progress : []);
-      progressSet.add(new Date().toDateString());
-      const datesArray = Array.from(progressSet).sort((a, b) => new Date(a) - new Date(b));
+      const progressSet = new Set((Array.isArray(questProg.progress) ? questProg.progress : []).map(toDayKey).filter(Boolean));
+      progressSet.add(getDayKey());
+      const datesArray = Array.from(progressSet).sort();
       questProg.progress = datesArray;
       completed = computeMaxStreak(datesArray) >= questDef.target;
       break;
