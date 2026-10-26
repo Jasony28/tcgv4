@@ -48,6 +48,7 @@ const urlsToCache = [
     './collection.js',
     './game.js',
     './marche.js',
+    './history-service.js',
     './profil.js',
     './battlepass.js',
     './battlepass-config.js',

@@ -227,6 +227,9 @@ export async function acceptTradeListing(buyer, listingId, offeredCardId) {
         if (!sellerDoc.exists()) throw new Error("Le vendeur n'existe plus.");
 
         const item = getListingItem(listing);
+        // Pour l'historique : chacun reçoit-il une carte qu'il n'avait pas encore ?
+        const buyerGotNew = item.type === 'card' && (buyerDoc.data().collection?.[item.cardId]?.quantity || 0) === 0;
+        const sellerGotNew = (sellerDoc.data().collection?.[offeredCardId]?.quantity || 0) === 0;
         // Si l'objet est la carte que l'acheteur donne (impossible en principe), on additionne proprement
         const buyerTotals = {};
         addTo(buyerTotals, `collection.${offeredCardId}.quantity`, -1);
@@ -238,7 +241,9 @@ export async function acceptTradeListing(buyer, listingId, offeredCardId) {
             buyerId: buyer.uid,
             buyerPseudo: buyerDoc.data().pseudo || '???',
             receivedCardId: offeredCardId,
-            completedAt: Timestamp.now()
+            completedAt: Timestamp.now(),
+            buyerGotNew,
+            sellerGotNew
         });
         result = { item, sellerId: listing.sellerId };
     });
@@ -260,7 +265,7 @@ export async function cancelListing(seller, listingId) {
             transaction.update(doc(db, "users", listing.highestBidderId), { coins: increment(listing.currentPrice), lastDeal: auctionDeal(listingId) });
         }
         transaction.update(doc(db, "users", listing.sellerId), { [itemField(item)]: increment(item.quantity) });
-        transaction.update(listingRef, { status: 'cancelled' });
+        transaction.update(listingRef, { status: 'cancelled', cancelledAt: Timestamp.now() });
     });
 }
 
@@ -295,9 +300,11 @@ export async function finalizeExpiredListings(myUid = null) {
                 const buyerRef = listing.highestBidderId ? doc(db, "users", listing.highestBidderId) : null;
                 const buyerDoc = buyerRef ? await transaction.get(buyerRef) : null;
 
+                const closing = { status: 'ended', endedAt: Timestamp.now() };
                 if (buyerDoc?.exists()) {
                     // Enchère gagnée (statistiques des deux joueurs dans la même transaction)
                     const entry = { cardId: item.cardId || null, name: describeItem(item).name, price: listing.currentPrice };
+                    if (item.type === 'card') closing.buyerGotNew = (buyerDoc.data().collection?.[item.cardId]?.quantity || 0) === 0;
                     transaction.update(buyerRef, { [itemField(item)]: increment(item.quantity), lastDeal: auctionDeal(docSnap.id), ...bestStat(buyerDoc.data(), 'bestPurchase', entry) });
                     if (sellerDoc.exists()) transaction.update(sellerRef, { coins: increment(sellerProceeds(listing.currentPrice)), lastDeal: auctionDeal(docSnap.id),
                         'stats.cardsSoldMarket': increment(1), ...bestStat(sellerDoc.data(), 'bestSale', entry) });
@@ -308,7 +315,7 @@ export async function finalizeExpiredListings(myUid = null) {
                         ...(getListingType(listing) === 'auction' ? { 'stats.failedSales': increment(1) } : {}) });
                     outcome = 'returned';
                 }
-                transaction.update(listingRef, { status: 'ended' });
+                transaction.update(listingRef, closing);
             });
         } catch (e) {
             console.error("Erreur clôture annonce :", e);

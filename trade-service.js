@@ -192,6 +192,11 @@ export async function validateTrade(tradeId) {
         for (const t of BOOSTER_TYPES) add(`boosterInventory.${t}`, offerB.boosters[t] - offerA.boosters[t]);
         add('coins', offerB.coins - offerA.coins);
 
+        // Pour l'historique : cartes que chacun reçoit sans les avoir encore
+        const newFor = (userData, offer) => Object.keys(offer.cards).filter(id => (userData.collection?.[id]?.quantity || 0) === 0);
+        const newCardsFrom = newFor(userASnap.data(), offerB);
+        const newCardsTo = newFor(userBSnap.data(), offerA);
+
         const updatesA = {}, updatesB = {};
         for (const [field, d] of Object.entries(delta)) {
             if (d === 0) continue;
@@ -204,6 +209,6 @@ export async function validateTrade(tradeId) {
         updatesB['stats.friendTrades'] = increment(1);
         if (Object.keys(updatesA).length) transaction.update(userARef, { ...updatesA, lastDeal });
         if (Object.keys(updatesB).length) transaction.update(userBRef, { ...updatesB, lastDeal });
-        transaction.update(tradeRef, { status: "completed" });
+        transaction.update(tradeRef, { status: "completed", completedAt: serverTimestamp(), newCardsFrom, newCardsTo });
     });
 }
