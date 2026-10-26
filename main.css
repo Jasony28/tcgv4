@@ -2518,3 +2518,29 @@ body.stage-open { overflow: hidden; }
     #create-body > .create-summary { grid-column: 2; margin: 0; border-radius: 16px; border: 1px solid var(--border); bottom: 12px; }
     .wanted-picker { max-height: 260px; }
 }
+
+/* Lots de cartes */
+.bundle-visual { position: relative; width: 100%; aspect-ratio: 5 / 6; display: grid; place-items: center; }
+.bundle-visual .bundle-card { position: absolute; width: 62%; top: 4%; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5); }
+.bundle-visual .b0 { z-index: 3; }
+.bundle-visual .b1 { z-index: 2; transform: translateX(-24%) rotate(-9deg); }
+.bundle-visual .b2 { z-index: 1; transform: translateX(24%) rotate(9deg); }
+.bundle-tag { position: absolute; bottom: 4%; z-index: 4; padding: 2px 10px; border-radius: 99px; font-weight: 900; font-size: .72rem; color: #1a1204; background: var(--gold); }
+.summary-visual.bundle-visual { width: 64px; aspect-ratio: 5 / 6; }
+.detail-visual.bundle-visual { max-width: 170px; }
+.bundle-list { display: grid; gap: 6px; margin: 10px 0; text-align: left; }
+.bundle-row { display: grid; grid-template-columns: 40px 1fr auto; grid-template-rows: auto auto; column-gap: 10px; align-items: center; padding: 6px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); }
+.bundle-row .card { grid-row: 1 / span 2; width: 40px; }
+.bundle-row small { color: var(--text-muted); font-size: .72rem; }
+.bundle-row small.owned { color: #34d985; grid-column: 3; grid-row: 1 / span 2; font-weight: 800; }
+.bundle-row small.new { color: var(--gold-light); grid-column: 3; grid-row: 1 / span 2; font-weight: 800; }
+.lot-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+.lot-row small { width: 100%; color: var(--text-muted); font-size: .75rem; }
+.lot-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 99px; font-size: .78rem; background: rgba(255, 194, 61, 0.14); border: 1px solid rgba(255, 194, 61, 0.4); }
+.lot-chip button { width: 22px; height: 22px; padding: 0; border-radius: 50%; font-size: .9rem; line-height: 1; box-shadow: none; }
+.pick-tile { position: relative; }
+.lot-qty { position: absolute; top: 4px; right: 4px; padding: 1px 6px; border-radius: 99px; font-size: .7rem; font-weight: 900; color: #1a1204; background: var(--gold); }
+.want-mode { margin-bottom: 6px; }
+.wanted-grid.all .wanted-card { border-style: dashed; }
+.give-all { width: 100%; margin-top: 10px; }
+.empty-msg.small { font-size: .8rem; margin: 8px 0 0; }

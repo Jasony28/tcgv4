@@ -41,7 +41,9 @@ export function listingToEvent(listing, uid) {
     const isWinner = listing.highestBidderId === uid;
     const isBuyer = listing.buyerId === uid;
     const base = { id: `a_${listing.id}`, partner: null, gave: [], got: [], coins: 0, price: null, newCards: [] };
-    const receivedCard = listing.receivedCardId ? { type: 'card', cardId: listing.receivedCardId, quantity: 1 } : null;
+    const receivedIds = listing.receivedCardIds || (listing.receivedCardId ? [listing.receivedCardId] : []);
+    const receivedCard = receivedIds.length ? { type: 'card', cardId: receivedIds[0], quantity: 1 } : null;
+    const receivedItems = receivedIds.map(cardId => ({ type: 'card', cardId, quantity: 1 }));
     const endTime = ms(listing.endedAt) || ms(listing.endTime);
 
     // Échange au marché conclu (annonce « trade » où quelqu'un a donné une carte demandée)
@@ -49,11 +51,11 @@ export function listingToEvent(listing, uid) {
         const time = ms(listing.completedAt) || ms(listing.createdAt);
         if (isSeller) {
             return { ...base, kind: 'market-trade', time, partner: listing.buyerPseudo || '???',
-                gave: [item], got: [receivedCard], newCards: listing.sellerGotNew ? [listing.receivedCardId] : [] };
+                gave: [item], got: receivedItems, newCards: listing.sellerGotNew ? [listing.receivedCardId] : [] };
         }
         if (isBuyer) {
             return { ...base, kind: 'market-trade', time, partner: listing.sellerPseudo || '???',
-                gave: [receivedCard], got: [item], newCards: listing.buyerGotNew && item.type === 'card' ? [item.cardId] : [] };
+                gave: receivedItems, got: [item], newCards: listing.buyerGotNew && item.type === 'card' ? [item.cardId] : [] };
         }
         return null;
     }

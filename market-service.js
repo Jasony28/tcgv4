@@ -51,7 +51,22 @@ export function getListingItem(listing) {
 export const getListingType = (listing) => listing.type || 'auction';
 
 /** Nom / image / rareté affichables pour un objet. */
+export const MAX_BUNDLE_CARDS = 10;
+const RARITY_RANK = { 'Commune': 0, 'Rare': 1, 'epique': 2, 'Légendaire': 3 };
+
+/** Cartes d'un lot, triées de la plus rare à la moins rare : [{ cardId, quantity, card }] */
+export function bundleCards(item) {
+    return Object.entries(item.cards || {}).filter(([, q]) => q > 0)
+        .map(([cardId, quantity]) => ({ cardId, quantity, card: findCard(cardId) }))
+        .sort((a, b) => (RARITY_RANK[b.card?.rarity] || 0) - (RARITY_RANK[a.card?.rarity] || 0));
+}
+
 export function describeItem(item) {
+    if (item.type === 'bundle') {
+        const cards = bundleCards(item);
+        const total = cards.reduce((n, c) => n + c.quantity, 0);
+        return { name: `Lot de ${total} cartes`, image: cards[0]?.card?.image || '', rarity: cards[0]?.card?.rarity || 'Commune', cards };
+    }
     if (item.type === 'booster') {
         const info = BOOSTER_INFO[item.boosterType] || { name: 'Booster' };
         return { name: info.name, image: 'assets/booster/booster.webp', rarity: null, boosterType: item.boosterType };
@@ -65,11 +80,24 @@ export function describeItem(item) {
 }
 
 export function minPriceFor(item) {
+    if (item.type === 'bundle') return bundleCards(item).reduce((n, c) => n + (CARD_MIN_PRICES[c.card?.rarity] || 5) * c.quantity, 0);
     const unit = item.type === 'booster' ? (BOOSTER_INFO[item.boosterType]?.minPrice || 10)
         : item.type === 'display' ? (DISPLAY_INFO[item.displayType]?.minPrice || 100)
         : (CARD_MIN_PRICES[findCard(item.cardId)?.rarity] || 5);
     return unit * (item.quantity || 1);
 }
+
+/**
+ * Mouvements d'inventaire d'un objet : { champ: quantité } (signe = ajouter ou retirer).
+ * Un lot touche plusieurs cartes à la fois.
+ */
+export function itemDeltas(item, sign = 1) {
+    if (item.type === 'bundle') {
+        return Object.fromEntries(bundleCards(item).map(c => [`collection.${c.cardId}.quantity`, sign * c.quantity]));
+    }
+    return { [itemField(item)]: sign * (item.quantity || 1) };
+}
+const incs = (deltas) => Object.fromEntries(Object.entries(deltas).map(([f, n]) => [f, increment(n)]));
 
 /** Champ Firestore de l'inventaire correspondant à l'objet. */
 function itemField(item) {
@@ -120,6 +148,12 @@ const SUGGESTED = {
 };
 /** { start, buyNow } conseillés pour un objet (selon la rareté, le type de booster/display et la quantité) */
 export function suggestedPrices(item) {
+    if (item.type === 'bundle') {
+        return bundleCards(item).reduce((t, c) => {
+            const [st, bn] = SUGGESTED[c.card?.rarity] || [5, 20];
+            return { start: t.start + st * c.quantity, buyNow: t.buyNow + bn * c.quantity };
+        }, { start: 0, buyNow: 0 });
+    }
     const min = minPriceFor({ ...item, quantity: 1 });
     let start = min, buyNow = min * 3;
     if (item.type === 'card') [start, buyNow] = SUGGESTED[findCard(item.cardId)?.rarity] || [min, min * 3];
@@ -128,13 +162,26 @@ export function suggestedPrices(item) {
     return { start: Math.max(start, min) * q, buyNow: Math.max(buyNow, min + 1) * q };
 }
 
-export async function createListing(seller, { mode, item, startPrice, buyNowPrice = null, fixedPrice = false, wantedCardIds, durationHours }) {
+export async function createListing(seller, { mode, item, startPrice, buyNowPrice = null, fixedPrice = false, wantedCardIds, wantMode = 'one', durationHours }) {
     if (!['auction', 'trade'].includes(mode)) throw new Error("Type d'annonce invalide.");
-    const quantity = Math.floor(item.quantity || 1);
+    let cleanItem, quantity;
+    if (item.type === 'bundle') {
+        const cards = {};
+        for (const [id, q] of Object.entries(item.cards || {})) {
+            const n = Math.floor(q);
+            if (n > 0 && findCard(id)) cards[id] = n;
+        }
+        if (Object.keys(cards).length > MAX_BUNDLE_CARDS) throw new Error(`Maximum ${MAX_BUNDLE_CARDS} cartes différentes par lot.`);
+        quantity = Object.values(cards).reduce((a, b) => a + b, 0);
+        if (quantity < 2) throw new Error("Un lot doit contenir au moins 2 cartes.");
+        cleanItem = { type: 'bundle', cards, quantity };
+    } else {
+    quantity = Math.floor(item.quantity || 1);
     if (quantity < 1) throw new Error("Quantité invalide.");
-    const cleanItem = item.type === 'booster' ? { type: 'booster', boosterType: item.boosterType, quantity }
+    cleanItem = item.type === 'booster' ? { type: 'booster', boosterType: item.boosterType, quantity }
         : item.type === 'display' ? { type: 'display', displayType: item.displayType, quantity }
         : { type: 'card', cardId: item.cardId, quantity };
+    }
     if (cleanItem.type === 'booster' && !BOOSTER_INFO[cleanItem.boosterType]) throw new Error("Booster inconnu.");
     if (cleanItem.type === 'display' && !DISPLAY_INFO[cleanItem.displayType]) throw new Error("Display inconnue.");
     if (cleanItem.type === 'card' && !findCard(cleanItem.cardId)) throw new Error("Carte inconnue.");
@@ -164,6 +211,8 @@ export async function createListing(seller, { mode, item, startPrice, buyNowPric
         if (wanted.length === 0) throw new Error("Choisis au moins une carte que tu veux recevoir.");
         if (wanted.length > MAX_WANTED_CARDS) throw new Error(`Maximum ${MAX_WANTED_CARDS} cartes demandées.`);
         if (cleanItem.type === 'card' && wanted.includes(cleanItem.cardId)) throw new Error("Tu ne peux pas demander la carte que tu proposes.");
+        if (cleanItem.type === 'bundle' && wanted.some(id => cleanItem.cards[id])) throw new Error("Tu ne peux pas demander une carte que tu mets dans le lot.");
+        if (!['one', 'all'].includes(wantMode)) throw new Error("Type d'échange invalide.");
     }
 
     const userRef = doc(db, "users", seller.uid);
@@ -171,17 +220,22 @@ export async function createListing(seller, { mode, item, startPrice, buyNowPric
     await runTransaction(db, async (transaction) => {
         const snap = await transaction.get(userRef);
         if (!snap.exists()) throw new Error("Utilisateur non trouvé.");
-        const owned = ownedCount(snap.data(), cleanItem);
+        if (cleanItem.type === 'bundle') {
+            for (const c of bundleCards(cleanItem)) {
+                if ((snap.data().collection?.[c.cardId]?.quantity || 0) <= c.quantity) throw new Error(`Garde au moins un exemplaire de ${c.card?.name || c.cardId}.`);
+            }
+        }
+        const owned = cleanItem.type === 'bundle' ? Infinity : ownedCount(snap.data(), cleanItem);
         if (cleanItem.type === 'card' && owned <= quantity) throw new Error("Garde au moins un exemplaire : tu n'as pas assez de doubles.");
         if (cleanItem.type === 'booster' && owned < quantity) throw new Error("Tu n'as pas assez de boosters.");
         if (cleanItem.type === 'display' && owned < quantity) throw new Error("Tu n'as pas assez de displays.");
 
-        transaction.update(userRef, { [itemField(cleanItem)]: increment(-quantity) });
+        transaction.update(userRef, incs(itemDeltas(cleanItem, -1)));
         transaction.set(listingRef, {
             type: mode,
             item: cleanItem,
             // Champs historiques, gardés pour les anciennes annonces et la tâche GitHub Actions
-            cardId: cleanItem.type === 'card' ? cleanItem.cardId : null,
+            cardId: cleanItem.type === 'card' ? cleanItem.cardId : null,  // (un lot n'a pas de carte unique)
             quantity,
             sellerId: seller.uid,
             sellerPseudo: seller.pseudo || '???',
@@ -192,6 +246,7 @@ export async function createListing(seller, { mode, item, startPrice, buyNowPric
             highestBidderId: null,
             highestBidderPseudo: null,
             wantedCardIds: wanted,
+            wantMode: mode === 'trade' ? wantMode : null,
             createdAt: Timestamp.now(),
             endTime: Timestamp.fromMillis(Date.now() + durationHours * 3600 * 1000),
             status: 'active'
@@ -282,7 +337,7 @@ export async function buyNow(buyer, listingId) {
         const entry = { cardId: item.cardId || null, name: describeItem(item).name, price };
         const deal = auctionDeal(listingId);
         const now = Timestamp.now();
-        transaction.update(buyerRef, { coins: increment(-(price - already)), [itemField(item)]: increment(item.quantity), ...bestStat(buyerDoc.data(), 'bestPurchase', entry) });
+        transaction.update(buyerRef, { coins: increment(-(price - already)), ...incs(itemDeltas(item)), ...bestStat(buyerDoc.data(), 'bestPurchase', entry) });
         if (previousRef) transaction.update(previousRef, { coins: increment(listing.currentPrice), lastDeal: deal });
         if (sellerDoc.exists()) transaction.update(sellerRef, { coins: increment(sellerProceeds(price)), lastDeal: deal,
             'stats.cardsSoldMarket': increment(1), ...bestStat(sellerDoc.data(), 'bestSale', entry) });
@@ -302,7 +357,7 @@ export async function buyNow(buyer, listingId) {
  * Accepte une annonce d'échange en donnant une des cartes demandées.
  * L'échange est immédiat : l'acheteur reçoit l'objet, le vendeur reçoit la carte.
  */
-export async function acceptTradeListing(buyer, listingId, offeredCardId) {
+export async function acceptTradeListing(buyer, listingId, offeredCardId = null) {
     const buyerRef = doc(db, "users", buyer.uid);
     const listingRef = doc(db, "auctions", listingId);
     let result;
@@ -317,8 +372,11 @@ export async function acceptTradeListing(buyer, listingId, offeredCardId) {
         if (listing.status !== 'active') throw new Error("Cette annonce n'est plus disponible.");
         if (listing.endTime.toMillis() <= Date.now()) throw new Error("Cette annonce est expirée.");
         if (listing.sellerId === buyer.uid) throw new Error("C'est ta propre annonce.");
-        if (!(listing.wantedCardIds || []).includes(offeredCardId)) throw new Error("Le vendeur ne demande pas cette carte.");
-        if ((buyerDoc.data().collection?.[offeredCardId]?.quantity || 0) < 1) throw new Error("Tu ne possèdes pas cette carte.");
+        // « toutes » : il faut donner chaque carte demandée ; sinon une seule au choix
+        const giving = listing.wantMode === 'all' ? [...(listing.wantedCardIds || [])] : [offeredCardId];
+        if (listing.wantMode !== 'all' && !(listing.wantedCardIds || []).includes(offeredCardId)) throw new Error("Le vendeur ne demande pas cette carte.");
+        const missing = giving.filter(id => (buyerDoc.data().collection?.[id]?.quantity || 0) < 1);
+        if (missing.length) throw new Error(listing.wantMode === 'all' ? `Il te manque ${missing.length} des cartes demandées.` : "Tu ne possèdes pas cette carte.");
 
         const sellerRef = doc(db, "users", listing.sellerId);
         const sellerDoc = await transaction.get(sellerRef);
@@ -330,15 +388,16 @@ export async function acceptTradeListing(buyer, listingId, offeredCardId) {
         const sellerGotNew = (sellerDoc.data().collection?.[offeredCardId]?.quantity || 0) === 0;
         // Si l'objet est la carte que l'acheteur donne (impossible en principe), on additionne proprement
         const buyerTotals = {};
-        addTo(buyerTotals, `collection.${offeredCardId}.quantity`, -1);
-        addTo(buyerTotals, itemField(item), item.quantity);
+        for (const id of giving) addTo(buyerTotals, `collection.${id}.quantity`, -1);
+        for (const [f, n] of Object.entries(itemDeltas(item))) addTo(buyerTotals, f, n);
         transaction.update(buyerRef, toIncrements(buyerTotals));
-        transaction.update(sellerRef, { [`collection.${offeredCardId}.quantity`]: increment(1), lastDeal: auctionDeal(listingId) });
+        transaction.update(sellerRef, { ...Object.fromEntries(giving.map(id => [`collection.${id}.quantity`, increment(1)])), lastDeal: auctionDeal(listingId) });
         transaction.update(listingRef, {
             status: 'completed',
             buyerId: buyer.uid,
             buyerPseudo: buyerDoc.data().pseudo || '???',
-            receivedCardId: offeredCardId,
+            receivedCardId: giving[0],
+            receivedCardIds: giving,
             completedAt: Timestamp.now(),
             buyerGotNew,
             sellerGotNew
@@ -362,7 +421,7 @@ export async function cancelListing(seller, listingId) {
         if (listing.highestBidderId) {
             transaction.update(doc(db, "users", listing.highestBidderId), { coins: increment(listing.currentPrice), lastDeal: auctionDeal(listingId) });
         }
-        transaction.update(doc(db, "users", listing.sellerId), { [itemField(item)]: increment(item.quantity) });
+        transaction.update(doc(db, "users", listing.sellerId), incs(itemDeltas(item)));
         transaction.update(listingRef, { status: 'cancelled', cancelledAt: Timestamp.now() });
     });
 }
@@ -403,13 +462,13 @@ export async function finalizeExpiredListings(myUid = null) {
                     // Enchère gagnée (statistiques des deux joueurs dans la même transaction)
                     const entry = { cardId: item.cardId || null, name: describeItem(item).name, price: listing.currentPrice };
                     if (item.type === 'card') closing.buyerGotNew = (buyerDoc.data().collection?.[item.cardId]?.quantity || 0) === 0;
-                    transaction.update(buyerRef, { [itemField(item)]: increment(item.quantity), lastDeal: auctionDeal(docSnap.id), ...bestStat(buyerDoc.data(), 'bestPurchase', entry) });
+                    transaction.update(buyerRef, { ...incs(itemDeltas(item)), lastDeal: auctionDeal(docSnap.id), ...bestStat(buyerDoc.data(), 'bestPurchase', entry) });
                     if (sellerDoc.exists()) transaction.update(sellerRef, { coins: increment(sellerProceeds(listing.currentPrice)), lastDeal: auctionDeal(docSnap.id),
                         'stats.cardsSoldMarket': increment(1), ...bestStat(sellerDoc.data(), 'bestSale', entry) });
                     outcome = 'sold';
                 } else {
                     // Personne (ou acheteur supprimé) : l'objet revient au vendeur
-                    if (sellerDoc.exists()) transaction.update(sellerRef, { [itemField(item)]: increment(item.quantity), lastDeal: auctionDeal(docSnap.id),
+                    if (sellerDoc.exists()) transaction.update(sellerRef, { ...incs(itemDeltas(item)), lastDeal: auctionDeal(docSnap.id),
                         ...(getListingType(listing) === 'auction' ? { 'stats.failedSales': increment(1) } : {}) });
                     outcome = 'returned';
                 }

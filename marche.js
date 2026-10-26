@@ -10,7 +10,7 @@ import {
     ALL_CARDS, BOOSTER_INFO, DISPLAY_INFO, DURATIONS_HOURS, MAX_WANTED_CARDS,
     findCard, cardLabel, getListingItem, getListingType, describeItem, minPriceFor, sellerProceeds, MARKET_TAX_RATE,
     createListing, placeBid, acceptTradeListing, cancelListing, finalizeExpiredListings, sellToConsole,
-    buyNow, canBuyNow, buyNowPriceOf, saleKind, suggestedPrices, MAX_PRICE
+    buyNow, canBuyNow, buyNowPriceOf, saleKind, suggestedPrices, MAX_PRICE, bundleCards, MAX_BUNDLE_CARDS
 } from './market-service.js';
 import { play } from './sfx.js';
 import { seriesOfBooster, seriesOfCard, seriesStatus } from './series-config.js';
@@ -18,6 +18,7 @@ import { loadMarketHistory, summarize, receivedCards } from './history-service.j
 
 /** Badge « Série terminée » : l'objet n'est plus produit, il devient rare */
 function seriesBadge(item) {
+    if (item.type === 'bundle') return '';
     const series = item.type === 'card' ? seriesOfCard(findCard(item.cardId))
         : seriesOfBooster(item.type === 'display' ? item.displayType : item.boosterType);
     return seriesStatus(series) === 'ended' ? '<span class="series-badge ended">💎 Série terminée</span>' : '';
@@ -45,6 +46,12 @@ function calculateTimeLeft(endTime) {
 /** Visuel d'un objet (carte ou booster) */
 function itemVisual(item, extraClass = '') {
     const info = describeItem(item);
+    if (item.type === 'bundle') {
+        const shown = info.cards.slice(0, 3);
+        return `<div class="bundle-visual ${extraClass}">
+            ${shown.map((c, i) => `<div class="card ${rarityClass(c.card?.rarity)} bundle-card b${i}"><img loading="lazy" class="card-image" src="${c.card?.image || ''}" alt=""></div>`).join('')}
+            <span class="bundle-tag">LOT ×${item.quantity}</span></div>`;
+    }
     if (item.type === 'display') {
         return `<div class="booster-visual display-stack ${item.displayType} ${extraClass}">
             <img src="${info.image}" alt=""><img src="${info.image}" alt=""><img src="${info.image}" alt="${info.name}">
@@ -193,7 +200,11 @@ function setupToolbar() {
 }
 
 /** Le joueur possède-t-il au moins une des cartes demandées ? */
-const canFulfill = (listing) => (listing.wantedCardIds || []).some(id => (me.collection?.[id]?.quantity || 0) > 0);
+const canFulfill = (listing) => {
+    const have = (id) => (me.collection?.[id]?.quantity || 0) > 0;
+    const wanted = listing.wantedCardIds || [];
+    return listing.wantMode === 'all' ? wanted.length > 0 && wanted.every(have) : wanted.some(have);
+};
 
 function visibleListings() {
     const now = Date.now();
@@ -296,7 +307,7 @@ function tileHTML(listing) {
         ? `<span class="listing-price"><span class="coin-icon"></span>${listing.currentPrice} <small>prix fixe</small></span>`
         : type === 'auction'
         ? `<span class="listing-price"><span class="coin-icon"></span>${listing.currentPrice}${listing.highestBidderId ? ' <small>enchère</small>' : ' <small>départ</small>'}</span>${canBuyNow(listing) ? `<span class="buynow-chip">⚡ ${listing.buyNowPrice}</span>` : ''}`
-        : `<span class="listing-wanted">Contre ${(listing.wantedCardIds || []).map(id => `<img loading="lazy" src="${findCard(id)?.image || ''}" alt="">`).join('')}</span>`;
+        : `<span class="listing-wanted">${listing.wantMode === 'all' ? `Contre les ${(listing.wantedCardIds || []).length}` : (listing.wantedCardIds || []).length > 1 ? 'Contre 1 au choix' : 'Contre'} ${(listing.wantedCardIds || []).map(id => `<img loading="lazy" src="${findCard(id)?.image || ''}" alt="">`).join('')}</span>`;
     return `
         <div class="listing-badges">
             <span class="listing-type-chip icon ${kind}" title="${KIND_LABEL[kind]}">${KIND_ICON[kind]}</span>
@@ -304,7 +315,7 @@ function tileHTML(listing) {
         </div>
         ${itemVisual(item)}
         <div class="listing-info">
-            <strong class="listing-name">${escapeHtml(info.name)}${item.quantity > 1 ? ` <small>x${item.quantity}</small>` : ''}</strong>
+            <strong class="listing-name">${escapeHtml(info.name)}${item.quantity > 1 && item.type !== 'bundle' ? ` <small>x${item.quantity}</small>` : ''}</strong>
             ${priceLine}
             <span class="listing-meta"><span class="listing-time" data-end="${listing.endTime.toMillis()}"></span> · ${mine ? 'Toi' : escapeHtml(listing.sellerPseudo)}</span>
             ${ended}
@@ -399,7 +410,7 @@ function historyThumb(item, isNew) {
     const info = describeItem(item);
     const qty = item.quantity > 1 ? `<span class="thumb-qty">x${item.quantity}</span>` : '';
     const newTag = isNew ? '<span class="thumb-new" title="Nouvelle carte">✨</span>' : '';
-    if (item.type === 'card') {
+    if (item.type === 'card' || item.type === 'bundle') {
         return `<span class="history-thumb card-thumb ${rarityClass(info.rarity)}" title="${escapeHtml(info.name)}">
             <img src="${info.image}" alt="${escapeHtml(info.name)}" loading="lazy">${qty}${newTag}</span>`;
     }
@@ -619,25 +630,36 @@ function renderListingModal(listing) {
                     <div class="card ${rarityClass(card?.rarity)}"><img loading="lazy" decoding="async" class="card-image" src="${card?.image || ''}" alt=""></div>
                     <span class="wanted-name">${escapeHtml(cardLabel(card) || id)}</span>
                     <span class="wanted-have">${have > 0 ? `Tu en as ${have}` : 'Tu ne l’as pas'}</span>
-                    ${mine ? '' : `<button class="give-button" data-card="${id}" ${have > 0 ? '' : 'disabled'}>Donner</button>`}
+                    ${mine || listing.wantMode === 'all' ? '' : `<button class="give-button" data-card="${id}" ${have > 0 ? '' : 'disabled'}>Donner</button>`}
                 </div>`;
         }).join('');
+        const all = listing.wantMode === 'all';
+        const haveAll = (listing.wantedCardIds || []).every(id => (me.collection?.[id]?.quantity || 0) > 0);
         actions = `
-            <p class="trade-explain">${mine ? 'Tu acceptes une de ces cartes en échange :' : `Donne <strong>une</strong> de ces cartes et reçois ${escapeHtml(info.name)}${item.quantity > 1 ? ` x${item.quantity}` : ''} immédiatement :`}</p>
-            <div class="wanted-grid">${wanted}</div>`;
+            <p class="trade-explain">${all
+                ? (mine ? `Tu demandes <strong>toutes</strong> ces cartes en échange :` : `Donne <strong>toutes</strong> ces cartes et reçois ${escapeHtml(info.name)} immédiatement :`)
+                : (mine ? 'Tu acceptes une de ces cartes en échange :' : `Donne <strong>une</strong> de ces cartes et reçois ${escapeHtml(info.name)}${item.quantity > 1 && item.type !== 'bundle' ? ` x${item.quantity}` : ''} immédiatement :`)}</p>
+            <div class="wanted-grid ${all ? 'all' : ''}">${wanted}</div>
+            ${all && !mine ? `<button id="give-all-button" class="give-all" ${haveAll ? '' : 'disabled'}>${haveAll ? `🔄 Donner ces ${(listing.wantedCardIds || []).length} cartes` : 'Il te manque des cartes demandées'}</button>` : ''}`;
     }
 
+    const bundleList = item.type === 'bundle' ? `
+        <div class="bundle-list">${bundleCards(item).map(c => `
+            <div class="bundle-row"><div class="card ${rarityClass(c.card?.rarity)}"><img loading="lazy" class="card-image" src="${c.card?.image || ''}" alt=""></div>
+                <span>${escapeHtml(cardLabel(c.card) || c.cardId)}</span><small>${RARITY_LABELS[c.card?.rarity] || ''}${c.quantity > 1 ? ` · x${c.quantity}` : ''}</small>
+                <small class="${(me.collection?.[c.cardId]?.quantity || 0) > 0 ? 'owned' : 'new'}">${(me.collection?.[c.cardId]?.quantity || 0) > 0 ? 'Possédée' : 'Nouvelle'}</small></div>`).join('')}</div>` : '';
     body.innerHTML = `
         <div class="listing-detail-head">
             ${itemVisual(item, 'detail-visual')}
             <div class="listing-detail-info">
                 <span class="listing-type-chip static ${saleKind(listing)}">${KIND_ICON[saleKind(listing)]} ${KIND_LABEL[saleKind(listing)]}</span>
-                <h3>${escapeHtml(info.name)}${item.quantity > 1 ? ` <small>x${item.quantity}</small>` : ''}</h3>
+                <h3>${escapeHtml(info.name)}${item.quantity > 1 && item.type !== 'bundle' ? ` <small>x${item.quantity}</small>` : ''}</h3>
                 ${info.rarity ? `<span class="rarity-chip ${rarityClass(info.rarity)}">${RARITY_LABELS[info.rarity]}</span>` : ''}
                 <p>Vendeur : <strong>${mine ? 'Toi' : escapeHtml(listing.sellerPseudo)}</strong></p>
                 <p>Fin dans : <strong>${calculateTimeLeft(listing.endTime)}</strong></p>
             </div>
         </div>
+        ${bundleList}
         ${actions}
         ${mine ? `<button id="cancel-listing-button" class="button-secondary">Annuler mon annonce</button>` : ''}
     `;
@@ -665,6 +687,7 @@ function renderListingModal(listing) {
     }));
     body.querySelectorAll('.give-button').forEach(btn => btn.addEventListener('click', () => handleGive(listing, btn.dataset.card)));
     body.querySelector('#buy-now-button')?.addEventListener('click', () => handleBuyNow(listing));
+    body.querySelector('#give-all-button')?.addEventListener('click', () => handleGive(listing, null));
     body.querySelector('#cancel-listing-button')?.addEventListener('click', () => handleCancel(listing));
 }
 
@@ -712,12 +735,12 @@ async function handleBid(listing) {
 
 async function handleGive(listing, cardId) {
     if (busy) return;
-    const card = findCard(cardId);
-    const have = me.collection?.[cardId]?.quantity || 0;
+    const giving = cardId ? [cardId] : (listing.wantedCardIds || []);
+    const lastCopies = giving.filter(id => (me.collection?.[id]?.quantity || 0) === 1).map(id => cardLabel(findCard(id)));
     const itemName = describeItem(getListingItem(listing)).name;
     const ok = await showConfirmDialog({
         title: "Confirmer l'échange",
-        message: `Donner ${cardLabel(card)} contre ${itemName} ?${have === 1 ? ' Attention : c’est ton seul exemplaire !' : ''}`,
+        message: `Donner ${giving.map(id => cardLabel(findCard(id))).join(', ')} contre ${itemName} ?${lastCopies.length ? ` Attention : c’est ton seul exemplaire de ${lastCopies.join(', ')} !` : ''}`,
         confirmText: 'Échanger',
         cancelText: 'Annuler'
     });
@@ -771,7 +794,7 @@ function openCreateModal(preset) {
     Object.assign(draft, {
         itemType: 'card', cardId: null, boosterType: null, displayType: null, quantity: 1,
         mode: 'auction', price: 0, buyNowOn: false, buyNow: 0, fixed: 0,
-        wanted: [], duration: 24, cardSearch: '', wantSearch: '', series: 'all', rarity: 'all'
+        wanted: [], wantMode: 'one', bundle: {}, duration: 24, cardSearch: '', wantSearch: '', series: 'all', rarity: 'all'
     });
     if (preset?.type === 'card') draft.cardId = preset.cardId;
     applySuggestions();
@@ -782,7 +805,9 @@ function closeCreateModal() {
     document.getElementById('create-modal').style.display = 'none';
 }
 
+const bundleTotal = () => Object.values(draft.bundle).reduce((a, b) => a + b, 0);
 function draftItem() {
+    if (draft.itemType === 'bundle') return bundleTotal() >= 2 ? { type: 'bundle', cards: { ...draft.bundle }, quantity: bundleTotal() } : null;
     if (draft.itemType === 'display') return draft.displayType ? { type: 'display', displayType: draft.displayType, quantity: draft.quantity } : null;
     if (draft.itemType === 'booster') return draft.boosterType ? { type: 'booster', boosterType: draft.boosterType, quantity: draft.quantity } : null;
     return draft.cardId ? { type: 'card', cardId: draft.cardId, quantity: draft.quantity } : null;
@@ -805,7 +830,7 @@ function applySuggestions(force = true) {
 
 /** Les autres annonces du même objet (prix du marché) */
 function marketContext(item) {
-    if (!item) return null;
+    if (!item || item.type === 'bundle') return null;
     const now = Date.now();
     const same = listings.filter(l => l.sellerId !== me.uid && l.endTime?.toMillis() > now && getListingType(l) === 'auction')
         .filter(l => { const i = getListingItem(l); return i.type === item.type && (i.cardId || i.boosterType || i.displayType) === (item.cardId || item.boosterType || item.displayType); });
@@ -831,7 +856,8 @@ function priceErrors(item) {
 }
 
 function itemPicker() {
-    if (draft.itemType === 'card') {
+    if (draft.itemType === 'card' || draft.itemType === 'bundle') {
+        const lot = draft.itemType === 'bundle';
         const all = ALL_CARDS.filter(c => (me.collection?.[c.id]?.quantity || 0) >= 2);
         const cards = all
             .filter(c => draft.series === 'all' || (c.version || 'v1') === draft.series)
@@ -843,8 +869,9 @@ function itemPicker() {
             <div class="filter-chips no-bleed small">${SERIES_FILTERS.map(([k, l]) => `<button class="chip ${draft.series === k ? 'active' : ''}" data-series="${k}">${l}</button>`).join('')}</div>
             <div class="filter-chips no-bleed small">${RARITY_FILTERS.map(([k, l]) => `<button class="chip ${draft.rarity === k ? 'active' : ''}" data-rarity="${k}">${l}</button>`).join('')}</div>
             <div class="pick-grid">${cards.length ? cards.map(c => `
-                <button class="pick-tile ${draft.cardId === c.id ? 'selected' : ''}" data-card="${c.id}">
+                <button class="pick-tile ${(lot ? draft.bundle[c.id] : draft.cardId === c.id) ? 'selected' : ''}" data-${lot ? 'lot' : 'card'}="${c.id}">
                     <img loading="lazy" src="${c.image}" alt=""><span>${escapeHtml(cardLabel(c))}</span><small>x${me.collection[c.id].quantity} · ${me.collection[c.id].quantity - 1} à vendre</small>
+                    ${lot && draft.bundle[c.id] ? `<span class="lot-qty">×${draft.bundle[c.id]}</span>` : ''}
                 </button>`).join('') : '<p class="empty-msg">Aucun double ne correspond à ces filtres.</p>'}</div>`;
     }
     const isDisplay = draft.itemType === 'display';
@@ -857,13 +884,27 @@ function itemPicker() {
     }).join('')}</div>`;
 }
 
+/** Contenu du lot en cours (retirer une carte ou un exemplaire) */
+function bundleRow() {
+    const cards = bundleCards({ cards: draft.bundle });
+    if (!cards.length) return '<p class="empty-msg small">Ton lot est vide : choisis au moins 2 cartes.</p>';
+    return `<div class="lot-row">${cards.map(c => `
+        <span class="lot-chip">${escapeHtml(c.card?.name || c.cardId)} ×${c.quantity}<button data-unlot="${c.cardId}" aria-label="Retirer">−</button></span>`).join('')}
+        <small>${bundleTotal()} carte${bundleTotal() > 1 ? 's' : ''} dans le lot${bundleTotal() < 2 ? ' (minimum 2)' : ''}</small></div>`;
+}
+
 function priceSection(item) {
     if (draft.mode === 'trade') {
         const wantList = ALL_CARDS
-            .filter(c => !(draft.itemType === 'card' && c.id === draft.cardId))
+            .filter(c => !(draft.itemType === 'card' && c.id === draft.cardId) && !(draft.itemType === 'bundle' && draft.bundle[c.id]))
             .filter(c => !draft.wantSearch || cardLabel(c).toLowerCase().includes(draft.wantSearch));
         return `
-            <span class="field-label">Cartes que tu acceptes en échange (1 à ${MAX_WANTED_CARDS}) · <strong>${draft.wanted.length} choisie${draft.wanted.length > 1 ? 's' : ''}</strong></span>
+            <div class="segmented want-mode">
+                <button data-wantmode="one" class="${draft.wantMode === 'one' ? 'active' : ''}">Une carte au choix</button>
+                <button data-wantmode="all" class="${draft.wantMode === 'all' ? 'active' : ''}">Toutes ces cartes</button>
+            </div>
+            <p class="hint">${draft.wantMode === 'all' ? "L'autre joueur doit te donner <strong>toutes</strong> les cartes choisies (ex : 1 carte contre 3)." : "L'autre joueur te donne <strong>une seule</strong> des cartes choisies, celle qu'il veut."}</p>
+            <span class="field-label">Cartes demandées (1 à ${MAX_WANTED_CARDS}) · <strong>${draft.wanted.length} choisie${draft.wanted.length > 1 ? 's' : ''}</strong></span>
             <input type="search" class="picker-search" id="want-search" placeholder="Chercher une carte…" value="${escapeHtml(draft.wantSearch)}">
             <div class="pick-grid wanted-picker">${wantList.map(c => {
                 const have = (me.collection?.[c.id]?.quantity || 0) > 0;
@@ -923,9 +964,12 @@ function renderCreate() {
                 <button data-itemtype="card" class="${draft.itemType === 'card' ? 'active' : ''}">🃏 Carte</button>
                 <button data-itemtype="booster" class="${draft.itemType === 'booster' ? 'active' : ''}">🎴 Booster</button>
                 <button data-itemtype="display" class="${draft.itemType === 'display' ? 'active' : ''}">🗃️ Display</button>
+                <button data-itemtype="bundle" class="${draft.itemType === 'bundle' ? 'active' : ''}">📦 Lot</button>
             </div>
+            ${draft.itemType === 'bundle' ? `<p class="hint">Touche plusieurs cartes pour les mettre dans le lot (touche encore pour en ajouter un exemplaire de plus). Ex : 3 cartes contre 1 seule.</p>` : ''}
             ${itemPicker()}
-            ${item ? `
+            ${draft.itemType === 'bundle' ? bundleRow() : ''}
+            ${item && item.type !== 'bundle' ? `
             <div class="qty-row">
                 <span>Quantité</span>
                 <div class="stepper"><button data-qty="-1" aria-label="Moins">−</button><strong>${draft.quantity}</strong><button data-qty="1" aria-label="Plus">+</button></div>
@@ -953,8 +997,8 @@ function updateSummary() {
     const item = draftItem();
     const errors = priceErrors(item);
     document.getElementById('price-errors').innerHTML = errors.map(e => `<p>⚠️ ${e}</p>`).join('');
-    let reason = !item ? 'Choisis un objet à vendre' : draft.mode === 'trade' && !draft.wanted.length ? 'Choisis au moins une carte demandée' : errors[0] || '';
-    const name = item ? describeItem(item).name + (item.quantity > 1 ? ` x${item.quantity}` : '') : '—';
+    let reason = !item ? (draft.itemType === 'bundle' ? 'Mets au moins 2 cartes dans le lot' : 'Choisis un objet à vendre') : draft.mode === 'trade' && !draft.wanted.length ? 'Choisis au moins une carte demandée' : errors[0] || '';
+    const name = item ? describeItem(item).name + (item.quantity > 1 && item.type !== 'bundle' ? ` x${item.quantity}` : '') : '—';
     const tax = Math.round(MARKET_TAX_RATE * 100);
     let priceLine = '', payout = '';
     if (draft.mode === 'fixed') {
@@ -964,7 +1008,9 @@ function updateSummary() {
         priceLine = `💰 Départ <strong>${draft.price || '—'}</strong> 🪙${draft.buyNowOn ? ` · ⚡ Achat immédiat <strong>${draft.buyNow || '—'}</strong> 🪙` : ''}`;
         payout = draft.price ? `Tu recevras au moins <strong>${sellerProceeds(draft.price)}</strong> 🪙${draft.buyNowOn && draft.buyNow > draft.price ? `, et <strong>${sellerProceeds(draft.buyNow)}</strong> 🪙 en cas d'achat immédiat` : ''} (taxe de ${tax} % comprise)` : '';
     } else {
-        priceLine = `🔄 Échange contre ${draft.wanted.length || '—'} carte${draft.wanted.length > 1 ? 's' : ''} au choix`;
+        priceLine = draft.wantMode === 'all' && draft.wanted.length > 1
+            ? `🔄 Échange contre ces ${draft.wanted.length} cartes`
+            : `🔄 Échange contre ${draft.wanted.length > 1 ? `1 carte au choix parmi ${draft.wanted.length}` : draft.wanted.length ? '1 carte' : '—'}`;
         payout = 'Pas de taxe sur les échanges.';
     }
     box.innerHTML = `
@@ -987,6 +1033,21 @@ function bindCreate(body) {
     body.querySelectorAll('[data-card]').forEach(b => b.onclick = pick(() => { draft.cardId = b.dataset.card; draft.wanted = draft.wanted.filter(id => id !== draft.cardId); }));
     body.querySelectorAll('[data-display]').forEach(b => b.onclick = pick(() => { draft.displayType = b.dataset.display; }));
     body.querySelectorAll('[data-booster]').forEach(b => b.onclick = pick(() => { draft.boosterType = b.dataset.booster; }));
+    body.querySelectorAll('[data-lot]').forEach(b => b.onclick = () => {
+        const id = b.dataset.lot, max = (me.collection?.[id]?.quantity || 0) - 1;
+        if (!draft.bundle[id] && Object.keys(draft.bundle).length >= MAX_BUNDLE_CARDS) { showToast('warning', `Maximum ${MAX_BUNDLE_CARDS} cartes différentes.`); return; }
+        draft.bundle[id] = Math.min(max, (draft.bundle[id] || 0) + 1);
+        draft.wanted = draft.wanted.filter(x => x !== id);
+        applySuggestions();
+        rerender();
+    });
+    body.querySelectorAll('[data-unlot]').forEach(b => b.onclick = () => {
+        const id = b.dataset.unlot;
+        if (draft.bundle[id] > 1) draft.bundle[id]--; else delete draft.bundle[id];
+        applySuggestions();
+        rerender();
+    });
+    body.querySelectorAll('[data-wantmode]').forEach(b => b.onclick = () => { draft.wantMode = b.dataset.wantmode; rerender(); });
     body.querySelectorAll('[data-series]').forEach(b => b.onclick = () => { draft.series = b.dataset.series; rerender(); });
     body.querySelectorAll('[data-rarity]').forEach(b => b.onclick = () => { draft.rarity = b.dataset.rarity; rerender(); });
     body.querySelectorAll('[data-qty]').forEach(b => b.onclick = () => {
@@ -1037,7 +1098,7 @@ async function publish() {
     button.disabled = true;
     try {
         await createListing(me, draft.mode === 'trade'
-            ? { mode: 'trade', item, wantedCardIds: draft.wanted, durationHours: draft.duration }
+            ? { mode: 'trade', item, wantedCardIds: draft.wanted, wantMode: draft.wanted.length > 1 ? draft.wantMode : 'one', durationHours: draft.duration }
             : draft.mode === 'fixed'
                 ? { mode: 'auction', item, fixedPrice: true, buyNowPrice: draft.fixed, durationHours: draft.duration }
                 : { mode: 'auction', item, startPrice: draft.price, buyNowPrice: draft.buyNowOn ? draft.buyNow : null, durationHours: draft.duration });

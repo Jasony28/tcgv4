@@ -22,6 +22,12 @@ export function getListingItem(listing) {
     return { type: 'card', cardId: listing.cardId, quantity: listing.quantity || 1 };
 }
 
+/** Mouvements d'inventaire d'un objet (un lot de cartes touche plusieurs cartes) */
+function itemDeltas(item) {
+    if (item.type === 'bundle') return Object.fromEntries(Object.entries(item.cards || {}).filter(([, q]) => q > 0).map(([id, q]) => [`collection.${id}.quantity`, q]));
+    return { [itemField(item)]: item.quantity };
+}
+
 function itemField(item) {
     if (item.type === 'booster') return `boosterInventory.${item.boosterType}`;
     if (item.type === 'display') return `displayInventory.${item.displayType}`;
@@ -65,9 +71,11 @@ export async function closeExpiredListings({ db, FieldValue, Timestamp, log = co
                         cardId: item.type === 'card' ? item.cardId : null,
                         ...(item.type === 'booster' ? { name: BOOSTER_NAMES[item.boosterType] || 'Booster' } : {}),
                         ...(item.type === 'display' ? { name: DISPLAY_NAMES[item.displayType] || 'Display' } : {}),
+                        ...(item.type === 'bundle' ? { name: `Lot de ${item.quantity} cartes` } : {}),
                         price: listing.currentPrice
                     };
-                    t.update(buyerRef, { [itemField(item)]: inc(item.quantity), ...bestUpdate(buyer.data(), 'bestPurchase', entry) });
+                    const gains = Object.fromEntries(Object.entries(itemDeltas(item)).map(([f, n]) => [f, inc(n)]));
+                    t.update(buyerRef, { ...gains, ...bestUpdate(buyer.data(), 'bestPurchase', entry) });
                     if (seller.exists) {
                         t.update(sellerRef, {
                             coins: inc(sellerProceeds(listing.currentPrice)),
@@ -79,7 +87,8 @@ export async function closeExpiredListings({ db, FieldValue, Timestamp, log = co
                 } else {
                     if (seller.exists) {
                         const isAuction = (listing.type || 'auction') === 'auction';
-                        t.update(sellerRef, { [itemField(item)]: inc(item.quantity), ...(isAuction ? { 'stats.failedSales': inc(1) } : {}) });
+                        const back = Object.fromEntries(Object.entries(itemDeltas(item)).map(([f, n]) => [f, inc(n)]));
+                        t.update(sellerRef, { ...back, ...(isAuction ? { 'stats.failedSales': inc(1) } : {}) });
                     }
                     result = 'returned';
                 }
