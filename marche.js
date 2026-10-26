@@ -9,8 +9,10 @@ import { updateQuestProgress } from './quest-manager.js';
 import {
     ALL_CARDS, BOOSTER_INFO, DISPLAY_INFO, DURATIONS_HOURS, MAX_WANTED_CARDS,
     findCard, cardLabel, getListingItem, getListingType, describeItem, minPriceFor, sellerProceeds, MARKET_TAX_RATE,
-    createListing, placeBid, acceptTradeListing, cancelListing, finalizeExpiredListings, sellToConsole
+    createListing, placeBid, acceptTradeListing, cancelListing, finalizeExpiredListings, sellToConsole,
+    buyNow, canBuyNow, buyNowPriceOf, saleKind, suggestedPrices, MAX_PRICE
 } from './market-service.js';
+import { play } from './sfx.js';
 import { seriesOfBooster, seriesOfCard, seriesStatus } from './series-config.js';
 import { loadMarketHistory, summarize, receivedCards } from './history-service.js';
 
@@ -199,9 +201,10 @@ function visibleListings() {
     if (currentTab === 'mine') list = list.filter(l => l.sellerId === me.uid);
     else {
         list = list.filter(l => l.sellerId !== me.uid); // « Acheter » : les annonces des autres
-        if (currentFilter === 'auction') list = list.filter(l => getListingType(l) === 'auction');
+        if (currentFilter === 'auction') list = list.filter(l => saleKind(l) === 'auction' || saleKind(l) === 'auction-buynow');
         if (currentFilter === 'trade') list = list.filter(l => getListingType(l) === 'trade');
         if (currentFilter === 'fulfil') list = list.filter(l => getListingType(l) === 'trade' && canFulfill(l));
+        if (currentFilter === 'buynow') list = list.filter(l => canBuyNow(l));
     }
     if (searchText) {
         list = list.filter(l => {
@@ -271,6 +274,9 @@ function tileClass(listing) {
     return `listing-tile ${type} ${mine ? 'mine' : ''} ${fulfil ? 'can-fulfill' : ''}`;
 }
 
+const KIND_ICON = { auction: '💰', 'auction-buynow': '💰', fixed: '🏷️', trade: '🔄' };
+const KIND_LABEL = { auction: 'Enchère', 'auction-buynow': 'Enchère + achat immédiat', fixed: 'Prix fixe', trade: 'Échange' };
+
 /** Une annonce : type à gauche, statut à droite (une seule ligne de badges), visuel, infos */
 function tileHTML(listing) {
     const item = getListingItem(listing);
@@ -280,17 +286,20 @@ function tileHTML(listing) {
     const fulfil = type === 'trade' && !mine && canFulfill(listing);
     const owned = item.type === 'card' && (me.collection?.[item.cardId]?.quantity || 0) > 0;
     const leading = type === 'auction' && listing.highestBidderId === me.uid;
+    const kind = saleKind(listing);
     const status = mine ? ['mine', 'Ton annonce']
         : leading ? ['leading', '👑 Tu mènes']
         : fulfil ? ['fulfil', '✓ Échangeable']
         : item.type === 'card' ? (owned ? ['owned', 'Possédée'] : ['new', 'Nouvelle']) : null;
     const ended = seriesBadge(item) ? '<span class="listing-collector">💎 Collector</span>' : '';
-    const priceLine = type === 'auction'
-        ? `<span class="listing-price"><span class="coin-icon"></span>${listing.currentPrice}${listing.highestBidderId ? '' : ' <small>prix de départ</small>'}</span>`
+    const priceLine = kind === 'fixed'
+        ? `<span class="listing-price"><span class="coin-icon"></span>${listing.currentPrice} <small>prix fixe</small></span>`
+        : type === 'auction'
+        ? `<span class="listing-price"><span class="coin-icon"></span>${listing.currentPrice}${listing.highestBidderId ? ' <small>enchère</small>' : ' <small>départ</small>'}</span>${canBuyNow(listing) ? `<span class="buynow-chip">⚡ ${listing.buyNowPrice}</span>` : ''}`
         : `<span class="listing-wanted">Contre ${(listing.wantedCardIds || []).map(id => `<img loading="lazy" src="${findCard(id)?.image || ''}" alt="">`).join('')}</span>`;
     return `
         <div class="listing-badges">
-            <span class="listing-type-chip icon ${type}" title="${type === 'auction' ? 'Enchère' : 'Échange'}">${type === 'auction' ? '💰' : '🔄'}</span>
+            <span class="listing-type-chip icon ${kind}" title="${KIND_LABEL[kind]}">${KIND_ICON[kind]}</span>
             ${status ? `<span class="listing-status ${status[0]}">${status[1]}</span>` : ''}
         </div>
         ${itemVisual(item)}
@@ -566,20 +575,38 @@ function renderListingModal(listing) {
     const mine = listing.sellerId === me.uid;
 
     let actions = '';
-    if (type === 'auction') {
+    const kind = saleKind(listing);
+    const direct = canBuyNow(listing);
+    const directPrice = buyNowPriceOf(listing);
+    if (kind === 'fixed') {
+        actions = `
+            <div class="buynow-box fixed">
+                <div><span>🏷️ Prix fixe</span><strong><span class="coin-icon"></span>${directPrice}</strong></div>
+                ${mine ? '' : `<button id="buy-now-button" ${(me.coins || 0) < directPrice ? 'disabled' : ''}>Acheter maintenant</button>`}
+            </div>
+            ${mine ? `<p class="hint">Si quelqu'un l'achète, tu reçois <strong>${sellerProceeds(directPrice)}</strong> pièces (taxe de ${Math.round(MARKET_TAX_RATE * 100)} %).</p>`
+                : `<p class="hint">${(me.coins || 0) < directPrice ? `<span class="bad">Il te manque ${directPrice - (me.coins || 0)} pièces.</span>` : `Tu as <strong>${me.coins || 0}</strong> pièces. L'objet arrive tout de suite dans ton inventaire.`}</p>`}`;
+    } else if (type === 'auction') {
         const minBid = listing.currentPrice + 1;
+        const buyBox = direct ? `
+            <div class="buynow-box">
+                <div><span>⚡ Achat immédiat</span><strong><span class="coin-icon"></span>${directPrice}</strong></div>
+                ${mine ? '' : `<button id="buy-now-button">Acheter maintenant</button>`}
+            </div>` : '';
         actions = `
             <div class="listing-stats">
                 <div><span>Prix actuel</span><strong class="gold"><span class="coin-icon"></span>${listing.currentPrice}</strong></div>
                 <div><span>Meilleure offre</span><strong>${listing.highestBidderPseudo ? escapeHtml(listing.highestBidderPseudo) + (listing.highestBidderId === me.uid ? ' (toi)' : '') : '—'}</strong></div>
             </div>
-            ${mine ? `<p class="hint">Si l'enchère se termine maintenant, tu reçois <strong>${sellerProceeds(listing.currentPrice)}</strong> pièces (taxe de ${Math.round(MARKET_TAX_RATE * 100)} %).</p>` : ''}
+            ${buyBox}
+            ${mine ? `<p class="hint">Si l'enchère se termine maintenant, tu reçois <strong>${sellerProceeds(listing.currentPrice)}</strong> pièces${direct ? `, ou <strong>${sellerProceeds(directPrice)}</strong> en cas d'achat immédiat` : ''} (taxe de ${Math.round(MARKET_TAX_RATE * 100)} %).</p>` : ''}
             ${mine ? '' : `
             <div class="bid-form">
-                <input type="number" id="bid-amount-input" min="${minBid}" value="${minBid}" inputmode="numeric">
+                <input type="number" id="bid-amount-input" min="${minBid}" ${direct ? `max="${directPrice - 1}"` : ''} value="${minBid}" inputmode="numeric">
                 <button id="submit-bid-button">Miser</button>
             </div>
-            <div class="quick-bids">${[1, 5, Math.max(10, Math.ceil(listing.currentPrice * 0.1))].map(n => `<button class="chip" data-add="${n}">+${n}</button>`).join('')}</div>
+            <div class="quick-bids">${[1, 5, Math.max(10, Math.ceil(listing.currentPrice * 0.1))].filter(n => !direct || listing.currentPrice + n < directPrice).map(n => `<button class="chip" data-add="${n}">+${n}</button>`).join('')}</div>
+            ${direct ? `<p class="hint">Les mises vont jusqu'à ${directPrice - 1} 🪙. Au-delà, utilise l'achat immédiat.</p>` : ''}
             ${listing.highestBidderId === me.uid ? '<p class="hint good">👑 Tu es le meilleur enchérisseur. Tu peux encore monter ta mise.</p>' : ''}
             <p class="hint" id="bid-hint">Tu as <strong>${me.coins || 0}</strong> pièces. Si quelqu'un mise plus que toi, tes pièces te sont rendues.</p>`}
             <div class="bid-history"><h4>Historique</h4><ul id="bid-history-list"><li>Chargement…</li></ul></div>`;
@@ -604,7 +631,7 @@ function renderListingModal(listing) {
         <div class="listing-detail-head">
             ${itemVisual(item, 'detail-visual')}
             <div class="listing-detail-info">
-                <span class="listing-type-chip static">${type === 'auction' ? '💰 Enchère' : '🔄 Échange'}</span>
+                <span class="listing-type-chip static ${saleKind(listing)}">${KIND_ICON[saleKind(listing)]} ${KIND_LABEL[saleKind(listing)]}</span>
                 <h3>${escapeHtml(info.name)}${item.quantity > 1 ? ` <small>x${item.quantity}</small>` : ''}</h3>
                 ${info.rarity ? `<span class="rarity-chip ${rarityClass(info.rarity)}">${RARITY_LABELS[info.rarity]}</span>` : ''}
                 <p>Vendeur : <strong>${mine ? 'Toi' : escapeHtml(listing.sellerPseudo)}</strong></p>
@@ -622,7 +649,7 @@ function renderListingModal(listing) {
         if (!bidInput) return;
         const amount = parseInt(bidInput.value, 10) || 0;
         const cost = listing.highestBidderId === me.uid ? amount - listing.currentPrice : amount;
-        const ok = amount > listing.currentPrice && cost <= (me.coins || 0);
+        const ok = amount > listing.currentPrice && cost <= (me.coins || 0) && (!listing.buyNowPrice || amount < listing.buyNowPrice);
         const btn = document.getElementById('submit-bid-button');
         btn.disabled = !ok;
         btn.textContent = amount > listing.currentPrice ? `Miser ${amount}` : 'Miser';
@@ -637,7 +664,35 @@ function renderListingModal(listing) {
         checkBid();
     }));
     body.querySelectorAll('.give-button').forEach(btn => btn.addEventListener('click', () => handleGive(listing, btn.dataset.card)));
+    body.querySelector('#buy-now-button')?.addEventListener('click', () => handleBuyNow(listing));
     body.querySelector('#cancel-listing-button')?.addEventListener('click', () => handleCancel(listing));
+}
+
+/** Achat immédiat, après confirmation */
+async function handleBuyNow(listing) {
+    if (busy) return;
+    const price = buyNowPriceOf(listing);
+    const already = listing.highestBidderId === me.uid ? listing.currentPrice : 0;
+    const name = describeItem(getListingItem(listing)).name;
+    const ok = await showConfirmDialog({
+        title: 'Acheter maintenant ?',
+        message: `${name} pour ${price} pièces${already ? ` (ta mise de ${already} est déjà comptée : tu paies ${price - already})` : ''}. Tu as ${me.coins || 0} pièces.`,
+        confirmText: `Acheter · ${price - already} 🪙`,
+        cancelText: 'Annuler'
+    });
+    if (!ok) return;
+    busy = true;
+    try {
+        await buyNow(me, listing.id);
+        play('coins');
+        showToast('success', `🎉 ${name} est à toi ! Il est déjà dans ton inventaire.`, 5000);
+        updateQuestProgress('win_bid');
+        closeListingModal();
+    } catch (e) {
+        showToast('error', e.message || "Achat impossible.");
+    } finally {
+        busy = false;
+    }
 }
 
 async function handleBid(listing) {
@@ -702,11 +757,24 @@ async function handleCancel(listing) {
 
 // ---------- Création d'une annonce ----------
 
-const draft = { itemType: 'card', cardId: null, boosterType: null, quantity: 1, mode: 'auction', price: 0, wanted: [], duration: 24, cardSearch: '', wantSearch: '' };
+// ---------- Mise en vente : objet → façon de vendre → prix → durée, avec aperçu et gain en direct ----------
+const draft = {};
+const SALE_MODES = [
+    { key: 'auction', icon: '💰', title: 'Enchère', text: 'Les joueurs misent, le plus offrant gagne' },
+    { key: 'fixed', icon: '🏷️', title: 'Prix fixe', text: 'Le premier qui paie repart avec' },
+    { key: 'trade', icon: '🔄', title: 'Échange', text: 'Contre une carte que tu choisis' }
+];
+const SERIES_FILTERS = [['all', 'Toutes'], ['v1', 'V1'], ['v2', 'V2'], ['v3', 'V3']];
+const RARITY_FILTERS = [['all', 'Toutes'], ['Commune', 'Communes'], ['Rare', 'Rares'], ['epique', 'Épiques'], ['Légendaire', 'Légendaires']];
 
 function openCreateModal(preset) {
-    Object.assign(draft, { itemType: 'card', cardId: null, boosterType: null, displayType: null, quantity: 1, mode: 'auction', price: 0, wanted: [], duration: 24, cardSearch: '', wantSearch: '' });
+    Object.assign(draft, {
+        itemType: 'card', cardId: null, boosterType: null, displayType: null, quantity: 1,
+        mode: 'auction', price: 0, buyNowOn: false, buyNow: 0, fixed: 0,
+        wanted: [], duration: 24, cardSearch: '', wantSearch: '', series: 'all', rarity: 'all'
+    });
     if (preset?.type === 'card') draft.cardId = preset.cardId;
+    applySuggestions();
     renderCreate();
     document.getElementById('create-modal').style.display = 'flex';
 }
@@ -725,94 +793,220 @@ function maxQuantity() {
     return Math.max(0, (me.collection?.[draft.cardId]?.quantity || 0) - 1);
 }
 
-function renderCreate() {
-    const body = document.getElementById('create-body');
-    const dupes = ALL_CARDS
-        .filter(c => (me.collection?.[c.id]?.quantity || 0) >= 2)
-        .filter(c => !draft.cardSearch || cardLabel(c).toLowerCase().includes(draft.cardSearch));
+/** Prix conseillés quand on choisit un objet ou une quantité (seulement si le joueur n'a rien tapé) */
+function applySuggestions(force = true) {
     const item = draftItem();
-    if (item && draft.quantity > maxQuantity()) draft.quantity = Math.max(1, maxQuantity());
-    const min = item ? minPriceFor({ ...item, quantity: draft.quantity }) : 0;
-    if (draft.price < min) draft.price = min;
+    if (!item) return;
+    const s = suggestedPrices(item);
+    if (force || !draft.price) draft.price = s.start;
+    if (force || !draft.buyNow) draft.buyNow = s.buyNow;
+    if (force || !draft.fixed) draft.fixed = s.buyNow;
+}
 
-    const cardPicker = dupes.length === 0
-        ? `<p class="empty-msg">Tu n'as aucun doublon pour l'instant. Ouvre des boosters !</p>`
-        : `<input type="search" class="picker-search" id="card-search" placeholder="Chercher dans tes doublons…" value="${escapeHtml(draft.cardSearch)}">
-           <div class="pick-grid">${dupes.map(c => `
-            <button class="pick-tile ${draft.cardId === c.id ? 'selected' : ''}" data-card="${c.id}">
-                <img loading="lazy" src="${c.image}" alt=""><span>${escapeHtml(cardLabel(c))}</span><small>x${me.collection[c.id].quantity}</small>
-            </button>`).join('')}</div>`;
+/** Les autres annonces du même objet (prix du marché) */
+function marketContext(item) {
+    if (!item) return null;
+    const now = Date.now();
+    const same = listings.filter(l => l.sellerId !== me.uid && l.endTime?.toMillis() > now && getListingType(l) === 'auction')
+        .filter(l => { const i = getListingItem(l); return i.type === item.type && (i.cardId || i.boosterType || i.displayType) === (item.cardId || item.boosterType || item.displayType); });
+    if (!same.length) return { count: 0 };
+    const perUnit = (l, p) => Math.round(p / (getListingItem(l).quantity || 1));
+    const direct = same.filter(canBuyNow).map(l => perUnit(l, buyNowPriceOf(l)));
+    return { count: same.length, minBid: Math.min(...same.map(l => perUnit(l, l.currentPrice))), minDirect: direct.length ? Math.min(...direct) : null };
+}
 
-    const boosterPicker = `<div class="pick-row">${Object.entries(BOOSTER_INFO).map(([t, b]) => {
-        const n = me.boosterInventory?.[t] || 0;
-        return `<button class="pick-tile booster ${t} ${draft.boosterType === t ? 'selected' : ''}" data-booster="${t}" ${n ? '' : 'disabled'}>
+/** Erreurs de prix (affichées en direct) */
+function priceErrors(item) {
+    if (!item || draft.mode === 'trade') return [];
+    const min = minPriceFor(item), errors = [];
+    if (draft.mode === 'fixed') {
+        if (!draft.fixed || draft.fixed < min) errors.push(`Le prix doit être d'au moins ${min} 🪙.`);
+        if (draft.fixed > MAX_PRICE) errors.push(`Prix maximum : ${MAX_PRICE} 🪙.`);
+    } else {
+        if (!draft.price || draft.price < min) errors.push(`Le prix de départ doit être d'au moins ${min} 🪙.`);
+        if (draft.buyNowOn && draft.buyNow <= draft.price) errors.push(`L'achat immédiat doit être plus élevé que le départ (${draft.price} 🪙).`);
+        if (draft.price > MAX_PRICE || (draft.buyNowOn && draft.buyNow > MAX_PRICE)) errors.push(`Prix maximum : ${MAX_PRICE} 🪙.`);
+    }
+    return errors;
+}
+
+function itemPicker() {
+    if (draft.itemType === 'card') {
+        const all = ALL_CARDS.filter(c => (me.collection?.[c.id]?.quantity || 0) >= 2);
+        const cards = all
+            .filter(c => draft.series === 'all' || (c.version || 'v1') === draft.series)
+            .filter(c => draft.rarity === 'all' || c.rarity === draft.rarity)
+            .filter(c => !draft.cardSearch || cardLabel(c).toLowerCase().includes(draft.cardSearch));
+        if (!all.length) return `<p class="empty-msg">Tu n'as aucun double pour l'instant (il faut en garder 1). Ouvre des boosters !</p>`;
+        return `
+            <input type="search" class="picker-search" id="card-search" placeholder="Chercher dans tes doubles…" value="${escapeHtml(draft.cardSearch)}">
+            <div class="filter-chips no-bleed small">${SERIES_FILTERS.map(([k, l]) => `<button class="chip ${draft.series === k ? 'active' : ''}" data-series="${k}">${l}</button>`).join('')}</div>
+            <div class="filter-chips no-bleed small">${RARITY_FILTERS.map(([k, l]) => `<button class="chip ${draft.rarity === k ? 'active' : ''}" data-rarity="${k}">${l}</button>`).join('')}</div>
+            <div class="pick-grid">${cards.length ? cards.map(c => `
+                <button class="pick-tile ${draft.cardId === c.id ? 'selected' : ''}" data-card="${c.id}">
+                    <img loading="lazy" src="${c.image}" alt=""><span>${escapeHtml(cardLabel(c))}</span><small>x${me.collection[c.id].quantity} · ${me.collection[c.id].quantity - 1} à vendre</small>
+                </button>`).join('') : '<p class="empty-msg">Aucun double ne correspond à ces filtres.</p>'}</div>`;
+    }
+    const isDisplay = draft.itemType === 'display';
+    const info = isDisplay ? DISPLAY_INFO : BOOSTER_INFO;
+    return `<div class="pick-row">${Object.entries(info).map(([t, b]) => {
+        const n = (isDisplay ? me.displayInventory : me.boosterInventory)?.[t] || 0;
+        const sel = (isDisplay ? draft.displayType : draft.boosterType) === t;
+        return `<button class="pick-tile booster ${t} ${sel ? 'selected' : ''}" data-${isDisplay ? 'display' : 'booster'}="${t}" ${n ? '' : 'disabled'}>
             <img src="assets/booster/booster.webp" alt=""><span>${b.name}</span><small>x${n}</small></button>`;
     }).join('')}</div>`;
+}
 
-    const displayPicker = `<div class="pick-row">${Object.entries(DISPLAY_INFO).map(([t, d]) => {
-        const n = me.displayInventory?.[t] || 0;
-        return `<button class="pick-tile booster ${t} ${draft.displayType === t ? 'selected' : ''}" data-display="${t}" ${n ? '' : 'disabled'}>
-            <img src="assets/booster/booster.webp" alt=""><span>${d.name}</span><small>x${n}</small></button>`;
-    }).join('')}</div>`;
+function priceSection(item) {
+    if (draft.mode === 'trade') {
+        const wantList = ALL_CARDS
+            .filter(c => !(draft.itemType === 'card' && c.id === draft.cardId))
+            .filter(c => !draft.wantSearch || cardLabel(c).toLowerCase().includes(draft.wantSearch));
+        return `
+            <span class="field-label">Cartes que tu acceptes en échange (1 à ${MAX_WANTED_CARDS}) · <strong>${draft.wanted.length} choisie${draft.wanted.length > 1 ? 's' : ''}</strong></span>
+            <input type="search" class="picker-search" id="want-search" placeholder="Chercher une carte…" value="${escapeHtml(draft.wantSearch)}">
+            <div class="pick-grid wanted-picker">${wantList.map(c => {
+                const have = (me.collection?.[c.id]?.quantity || 0) > 0;
+                return `<button class="pick-tile ${draft.wanted.includes(c.id) ? 'selected' : ''}" data-want="${c.id}">
+                    <img loading="lazy" src="${c.image}" alt=""><span>${escapeHtml(cardLabel(c))}</span><small>${have ? 'possédée' : '<b>manquante</b>'}</small></button>`;
+            }).join('')}</div>
+            <p class="hint">Le premier joueur qui te donne une de ces cartes reçoit ton objet. Les échanges ne sont pas taxés.</p>`;
+    }
+    if (!item) return '<p class="hint">Choisis d\'abord ce que tu vends.</p>';
+    const s = suggestedPrices(item), min = minPriceFor(item);
+    const ctx = marketContext(item);
+    const chips = (field, values) => `<div class="price-chips">${values.filter(([, v]) => v >= min).map(([l, v]) => `<button class="chip" data-set="${field}" data-value="${v}">${l} · ${v}</button>`).join('')}</div>`;
+    const market = ctx?.count
+        ? `<p class="market-context">📊 Sur le marché : <strong>${ctx.count}</strong> annonce${ctx.count > 1 ? 's' : ''} de cet objet · enchère dès <strong>${ctx.minBid * draft.quantity}</strong> 🪙${ctx.minDirect ? ` · achat direct dès <strong>${ctx.minDirect * draft.quantity}</strong> 🪙` : ''}</p>`
+        : `<p class="market-context">📊 Personne d'autre ne vend cet objet en ce moment : à toi de fixer le prix !</p>`;
+    if (draft.mode === 'fixed') {
+        return `
+            <label class="field-label" for="fixed-input">Prix de vente</label>
+            <div class="price-input"><span class="coin-icon"></span><input type="number" id="fixed-input" data-field="fixed" min="${min}" max="${MAX_PRICE}" value="${draft.fixed || ''}" inputmode="numeric"></div>
+            ${chips('fixed', [['Conseillé', s.buyNow], ['Rapide', Math.max(min, Math.round(s.buyNow * 0.6))], ['Minimum', min]])}
+            ${market}`;
+    }
+    return `
+        <label class="field-label" for="price-input">Prix de départ de l'enchère</label>
+        <div class="price-input"><span class="coin-icon"></span><input type="number" id="price-input" data-field="price" min="${min}" max="${MAX_PRICE}" value="${draft.price || ''}" inputmode="numeric"></div>
+        ${chips('price', [['Conseillé', s.start], ['Minimum', min]])}
+        <label class="toggle-row">
+            <span><strong>⚡ Achat immédiat</strong><small>Un joueur peut acheter tout de suite à ce prix, sans attendre la fin</small></span>
+            <input type="checkbox" class="switch" id="buynow-toggle" ${draft.buyNowOn ? 'checked' : ''}>
+        </label>
+        ${draft.buyNowOn ? `
+            <div class="price-input"><span class="coin-icon"></span><input type="number" id="buynow-input" data-field="buyNow" min="${draft.price + 1}" max="${MAX_PRICE}" value="${draft.buyNow || ''}" inputmode="numeric"></div>
+            ${chips('buyNow', [['Conseillé', Math.max(s.buyNow, draft.price + 1)], ['×2', draft.price * 2], ['×5', draft.price * 5]])}` : ''}
+        ${market}`;
+}
 
-    const wantList = ALL_CARDS
-        .filter(c => !(draft.itemType === 'card' && c.id === draft.cardId))
-        .filter(c => !draft.wantSearch || cardLabel(c).toLowerCase().includes(draft.wantSearch));
+function endLabel() {
+    const end = new Date(Date.now() + draft.duration * 3600000);
+    const sameDay = end.toDateString() === new Date().toDateString();
+    const day = sameDay ? "aujourd'hui" : end.toDateString() === new Date(Date.now() + 86400000).toDateString() ? 'demain' : end.toLocaleDateString('fr-FR', { weekday: 'long' });
+    return `${day} à ${end.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+function renderCreate() {
+    const body = document.getElementById('create-body');
+    const item = draftItem();
+    if (item && draft.quantity > maxQuantity()) draft.quantity = Math.max(1, maxQuantity());
+    const step = (n, title, content, done) => `
+        <section class="form-step ${done ? 'done' : ''}">
+            <span class="step-label"><span class="step-num">${done ? '✓' : n}</span>${title}</span>
+            ${content}
+        </section>`;
 
     body.innerHTML = `
-        <div class="form-step">
-            <span class="step-label">1. Que veux-tu proposer ?</span>
+        ${step(1, 'Que veux-tu vendre ?', `
             <div class="segmented">
-                <button data-itemtype="card" class="${draft.itemType === 'card' ? 'active' : ''}">🃏 Une carte</button>
-                <button data-itemtype="booster" class="${draft.itemType === 'booster' ? 'active' : ''}">🎴 Un booster</button>
-                <button data-itemtype="display" class="${draft.itemType === 'display' ? 'active' : ''}">🗃️ Une display</button>
+                <button data-itemtype="card" class="${draft.itemType === 'card' ? 'active' : ''}">🃏 Carte</button>
+                <button data-itemtype="booster" class="${draft.itemType === 'booster' ? 'active' : ''}">🎴 Booster</button>
+                <button data-itemtype="display" class="${draft.itemType === 'display' ? 'active' : ''}">🗃️ Display</button>
             </div>
-            ${{ card: cardPicker, booster: boosterPicker, display: displayPicker }[draft.itemType]}
+            ${itemPicker()}
             ${item ? `
             <div class="qty-row">
                 <span>Quantité</span>
-                <div class="stepper"><button data-qty="-1">−</button><strong>${draft.quantity}</strong><button data-qty="1">+</button></div>
+                <div class="stepper"><button data-qty="-1" aria-label="Moins">−</button><strong>${draft.quantity}</strong><button data-qty="1" aria-label="Plus">+</button></div>
                 <small>max ${maxQuantity()}${draft.itemType === 'card' ? ' (tu gardes 1 exemplaire)' : ''}</small>
-            </div>` : ''}
-        </div>
-
-        <div class="form-step">
-            <span class="step-label">2. Type d'annonce</span>
-            <div class="segmented">
-                <button data-mode="auction" class="${draft.mode === 'auction' ? 'active' : ''}">💰 Enchère</button>
-                <button data-mode="trade" class="${draft.mode === 'trade' ? 'active' : ''}">🔄 Échange</button>
-            </div>
-            ${draft.mode === 'auction' ? `
-                <label class="field-label" for="price-input">Prix de départ ${item ? `(minimum ${min})` : ''}</label>
-                <input type="number" id="price-input" min="${min}" value="${draft.price || ''}" inputmode="numeric" ${item ? '' : 'disabled'}>
-                <p class="hint">Taxe de l'Hôtel des Ventes : ${Math.round(MARKET_TAX_RATE * 100)} % du prix final est prélevé à la vente. Les échanges ne sont pas taxés.</p>
-            ` : `
-                <span class="field-label">Cartes que tu acceptes en échange (1 à ${MAX_WANTED_CARDS}) — <strong>${draft.wanted.length} choisie(s)</strong></span>
-                <input type="search" class="picker-search" id="want-search" placeholder="Chercher une carte…" value="${escapeHtml(draft.wantSearch)}">
-                <div class="pick-grid wanted-picker">${wantList.map(c => {
-                    const have = (me.collection?.[c.id]?.quantity || 0) > 0;
-                    return `<button class="pick-tile ${draft.wanted.includes(c.id) ? 'selected' : ''}" data-want="${c.id}">
-                        <img loading="lazy" src="${c.image}" alt=""><span>${escapeHtml(cardLabel(c))}</span><small>${have ? 'possédée' : '<b>manquante</b>'}</small></button>`;
-                }).join('')}</div>
-            `}
-        </div>
-
-        <div class="form-step">
-            <span class="step-label">3. Durée</span>
-            <div class="filter-chips no-bleed">${DURATIONS_HOURS.map(h => `<button class="chip ${draft.duration === h ? 'active' : ''}" data-duration="${h}">${h}h</button>`).join('')}</div>
-        </div>
-
-        <button id="publish-button" ${item ? '' : 'disabled'}>Publier l'annonce</button>
+            </div>` : ''}`, !!item)}
+        ${step(2, 'Comment veux-tu vendre ?', `
+            <div class="sale-modes">${SALE_MODES.map(m => `
+                <button class="sale-mode ${draft.mode === m.key ? 'active' : ''}" data-mode="${m.key}">
+                    <span class="sale-icon">${m.icon}</span><strong>${m.title}</strong><small>${m.text}</small>
+                </button>`).join('')}</div>`, true)}
+        ${step(3, draft.mode === 'trade' ? 'Que veux-tu en échange ?' : 'Ton prix', `${priceSection(item)}<div id="price-errors" class="price-errors"></div>`, draft.mode === 'trade' ? draft.wanted.length > 0 : !!item && !priceErrors(item).length)}
+        ${step(4, 'Durée', `
+            <div class="filter-chips no-bleed">${DURATIONS_HOURS.map(h => `<button class="chip ${draft.duration === h ? 'active' : ''}" data-duration="${h}">${h} h</button>`).join('')}</div>
+            <p class="hint">Fin ${endLabel()}. Si personne n'achète, l'objet te revient automatiquement.</p>`, true)}
+        <div id="create-summary" class="create-summary"></div>
     `;
+    bindCreate(body);
+    updateSummary();
+}
 
+/** Aperçu de l'annonce + ce que tu vas gagner + bouton (mis à jour à chaque frappe, sans tout redessiner) */
+function updateSummary() {
+    const box = document.getElementById('create-summary');
+    if (!box) return;
+    const item = draftItem();
+    const errors = priceErrors(item);
+    document.getElementById('price-errors').innerHTML = errors.map(e => `<p>⚠️ ${e}</p>`).join('');
+    let reason = !item ? 'Choisis un objet à vendre' : draft.mode === 'trade' && !draft.wanted.length ? 'Choisis au moins une carte demandée' : errors[0] || '';
+    const name = item ? describeItem(item).name + (item.quantity > 1 ? ` x${item.quantity}` : '') : '—';
+    const tax = Math.round(MARKET_TAX_RATE * 100);
+    let priceLine = '', payout = '';
+    if (draft.mode === 'fixed') {
+        priceLine = `🏷️ Prix fixe · <strong>${draft.fixed || '—'}</strong> 🪙`;
+        payout = draft.fixed ? `Tu recevras <strong>${sellerProceeds(draft.fixed)}</strong> 🪙 (taxe de ${tax} % comprise)` : '';
+    } else if (draft.mode === 'auction') {
+        priceLine = `💰 Départ <strong>${draft.price || '—'}</strong> 🪙${draft.buyNowOn ? ` · ⚡ Achat immédiat <strong>${draft.buyNow || '—'}</strong> 🪙` : ''}`;
+        payout = draft.price ? `Tu recevras au moins <strong>${sellerProceeds(draft.price)}</strong> 🪙${draft.buyNowOn && draft.buyNow > draft.price ? `, et <strong>${sellerProceeds(draft.buyNow)}</strong> 🪙 en cas d'achat immédiat` : ''} (taxe de ${tax} % comprise)` : '';
+    } else {
+        priceLine = `🔄 Échange contre ${draft.wanted.length || '—'} carte${draft.wanted.length > 1 ? 's' : ''} au choix`;
+        payout = 'Pas de taxe sur les échanges.';
+    }
+    box.innerHTML = `
+        <div class="summary-preview">
+            ${item ? itemVisual(item, 'summary-visual') : '<div class="summary-visual empty">?</div>'}
+            <div class="summary-text">
+                <strong>${escapeHtml(name)}</strong>
+                <span>${priceLine}</span>
+                <small>${payout}</small>
+            </div>
+        </div>
+        <button id="publish-button" ${reason ? 'disabled' : ''}>${reason || (draft.mode === 'trade' ? 'Proposer l’échange' : 'Mettre en vente')}</button>`;
+    box.querySelector('#publish-button').onclick = publish;
+}
+
+function bindCreate(body) {
     const rerender = () => renderCreate();
+    const pick = (fn) => () => { fn(); draft.quantity = 1; applySuggestions(); rerender(); };
     body.querySelectorAll('[data-itemtype]').forEach(b => b.onclick = () => { draft.itemType = b.dataset.itemtype; draft.quantity = 1; rerender(); });
-    body.querySelectorAll('[data-card]').forEach(b => b.onclick = () => { draft.cardId = b.dataset.card; draft.quantity = 1; draft.wanted = draft.wanted.filter(id => id !== draft.cardId); rerender(); });
-    body.querySelectorAll('[data-display]').forEach(b => b.onclick = () => { draft.displayType = b.dataset.display; draft.quantity = 1; rerender(); });
-    body.querySelectorAll('[data-booster]').forEach(b => b.onclick = () => { draft.boosterType = b.dataset.booster; draft.quantity = 1; rerender(); });
-    body.querySelectorAll('[data-qty]').forEach(b => b.onclick = () => { draft.quantity = Math.min(Math.max(1, draft.quantity + Number(b.dataset.qty)), Math.max(1, maxQuantity())); rerender(); });
+    body.querySelectorAll('[data-card]').forEach(b => b.onclick = pick(() => { draft.cardId = b.dataset.card; draft.wanted = draft.wanted.filter(id => id !== draft.cardId); }));
+    body.querySelectorAll('[data-display]').forEach(b => b.onclick = pick(() => { draft.displayType = b.dataset.display; }));
+    body.querySelectorAll('[data-booster]').forEach(b => b.onclick = pick(() => { draft.boosterType = b.dataset.booster; }));
+    body.querySelectorAll('[data-series]').forEach(b => b.onclick = () => { draft.series = b.dataset.series; rerender(); });
+    body.querySelectorAll('[data-rarity]').forEach(b => b.onclick = () => { draft.rarity = b.dataset.rarity; rerender(); });
+    body.querySelectorAll('[data-qty]').forEach(b => b.onclick = () => {
+        draft.quantity = Math.min(Math.max(1, draft.quantity + Number(b.dataset.qty)), Math.max(1, maxQuantity()));
+        applySuggestions();
+        rerender();
+    });
     body.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { draft.mode = b.dataset.mode; rerender(); });
     body.querySelectorAll('[data-duration]').forEach(b => b.onclick = () => { draft.duration = Number(b.dataset.duration); rerender(); });
+    body.querySelectorAll('[data-set]').forEach(b => b.onclick = () => { draft[b.dataset.set] = Number(b.dataset.value); rerender(); });
+    body.querySelector('#buynow-toggle')?.addEventListener('change', (e) => {
+        draft.buyNowOn = e.target.checked;
+        if (draft.buyNowOn && draft.buyNow <= draft.price) draft.buyNow = Math.max(suggestedPrices(draftItem()).buyNow, draft.price * 2);
+        rerender();
+    });
+    // Prix tapés : mise à jour de l'aperçu sans redessiner (on garde le curseur dans le champ)
+    body.querySelectorAll('[data-field]').forEach(input => input.addEventListener('input', () => {
+        draft[input.dataset.field] = parseInt(input.value, 10) || 0;
+        updateSummary();
+    }));
     body.querySelectorAll('[data-want]').forEach(b => b.onclick = () => {
         const id = b.dataset.want;
         if (draft.wanted.includes(id)) draft.wanted = draft.wanted.filter(x => x !== id);
@@ -820,7 +1014,7 @@ function renderCreate() {
         else draft.wanted.push(id);
         rerender();
     });
-    // Recherche : on garde le focus et la position du curseur après le rafraîchissement
+    // Recherches : on garde le focus et la position du curseur après le rafraîchissement
     for (const [inputId, key] of [['card-search', 'cardSearch'], ['want-search', 'wantSearch']]) {
         const input = body.querySelector('#' + inputId);
         if (!input) continue;
@@ -832,9 +1026,6 @@ function renderCreate() {
             again.setSelectionRange(again.value.length, again.value.length);
         };
     }
-    const priceInput = body.querySelector('#price-input');
-    if (priceInput) priceInput.oninput = () => { draft.price = parseInt(priceInput.value, 10) || 0; };
-    body.querySelector('#publish-button').onclick = publish;
 }
 
 async function publish() {
@@ -845,10 +1036,13 @@ async function publish() {
     const button = document.getElementById('publish-button');
     button.disabled = true;
     try {
-        await createListing(me, {
-            mode: draft.mode, item, startPrice: draft.price, wantedCardIds: draft.wanted, durationHours: draft.duration
-        });
-        showToast('success', 'Annonce publiée ! Retrouve-la dans « Mes annonces ».');
+        await createListing(me, draft.mode === 'trade'
+            ? { mode: 'trade', item, wantedCardIds: draft.wanted, durationHours: draft.duration }
+            : draft.mode === 'fixed'
+                ? { mode: 'auction', item, fixedPrice: true, buyNowPrice: draft.fixed, durationHours: draft.duration }
+                : { mode: 'auction', item, startPrice: draft.price, buyNowPrice: draft.buyNowOn ? draft.buyNow : null, durationHours: draft.duration });
+        showToast('success', 'Annonce publiée ! Retrouve-la dans « Mes ventes ».');
+        play('coins');
         updateQuestProgress('create_auction');
         closeCreateModal();
         document.querySelector('#market-tabs [data-tab="mine"]').click();

@@ -97,7 +97,38 @@ function toIncrements(totals) {
  * Crée une annonce. L'objet est retiré de l'inventaire du vendeur (mis "en dépôt").
  * Pour une carte, le vendeur doit en garder au moins un exemplaire.
  */
-export async function createListing(seller, { mode, item, startPrice, wantedCardIds, durationHours }) {
+export const MAX_PRICE = 1000000;
+
+/**
+ * Façon de vendre une annonce :
+ *  'auction' : enchère classique · 'auction-buynow' : enchère + achat immédiat · 'fixed' : prix fixe · 'trade' : échange
+ */
+export function saleKind(listing) {
+    if (getListingType(listing) === 'trade') return 'trade';
+    if (listing.allowBids === false) return 'fixed';
+    return listing.buyNowPrice ? 'auction-buynow' : 'auction';
+}
+/** L'achat immédiat est-il encore possible ? (il disparaît quand une enchère l'atteint) */
+export const canBuyNow = (listing) => getListingType(listing) === 'auction' && !!listing.buyNowPrice && listing.currentPrice < listing.buyNowPrice
+    || listing.allowBids === false;
+/** Prix d'achat immédiat effectif */
+export const buyNowPriceOf = (listing) => listing.allowBids === false ? listing.currentPrice : listing.buyNowPrice;
+
+// Prix conseillés (par exemplaire) : départ d'enchère et achat immédiat
+const SUGGESTED = {
+    'Commune': [5, 20], 'Rare': [12, 50], 'epique': [35, 150], 'Légendaire': [130, 600]
+};
+/** { start, buyNow } conseillés pour un objet (selon la rareté, le type de booster/display et la quantité) */
+export function suggestedPrices(item) {
+    const min = minPriceFor({ ...item, quantity: 1 });
+    let start = min, buyNow = min * 3;
+    if (item.type === 'card') [start, buyNow] = SUGGESTED[findCard(item.cardId)?.rarity] || [min, min * 3];
+    if (item.type === 'display') buyNow = min * 2;
+    const q = Math.max(1, item.quantity || 1);
+    return { start: Math.max(start, min) * q, buyNow: Math.max(buyNow, min + 1) * q };
+}
+
+export async function createListing(seller, { mode, item, startPrice, buyNowPrice = null, fixedPrice = false, wantedCardIds, durationHours }) {
     if (!['auction', 'trade'].includes(mode)) throw new Error("Type d'annonce invalide.");
     const quantity = Math.floor(item.quantity || 1);
     if (quantity < 1) throw new Error("Quantité invalide.");
@@ -109,12 +140,25 @@ export async function createListing(seller, { mode, item, startPrice, wantedCard
     if (cleanItem.type === 'card' && !findCard(cleanItem.cardId)) throw new Error("Carte inconnue.");
     if (!DURATIONS_HOURS.includes(durationHours)) throw new Error("Durée invalide.");
 
-    let price = 0;
+    let price = 0, buyNow = null;
     let wanted = [];
     if (mode === 'auction') {
-        price = Math.floor(startPrice);
         const min = minPriceFor(cleanItem);
-        if (!price || price < min) throw new Error(`Le prix de départ doit être d'au moins ${min} pièces.`);
+        if (fixedPrice) {
+            // Prix fixe : pas d'enchères, on achète directement à ce prix
+            price = Math.floor(buyNowPrice || startPrice);
+            if (!price || price < min) throw new Error(`Le prix doit être d'au moins ${min} pièces.`);
+            if (price > MAX_PRICE) throw new Error(`Prix maximum : ${MAX_PRICE} pièces.`);
+        } else {
+            price = Math.floor(startPrice);
+            if (!price || price < min) throw new Error(`Le prix de départ doit être d'au moins ${min} pièces.`);
+            if (buyNowPrice) {
+                buyNow = Math.floor(buyNowPrice);
+                if (buyNow <= price) throw new Error("Le prix d'achat immédiat doit être plus élevé que le prix de départ.");
+                if (buyNow > MAX_PRICE) throw new Error(`Prix maximum : ${MAX_PRICE} pièces.`);
+            }
+            if (price > MAX_PRICE) throw new Error(`Prix maximum : ${MAX_PRICE} pièces.`);
+        }
     } else {
         wanted = [...new Set(wantedCardIds || [])].filter(id => findCard(id));
         if (wanted.length === 0) throw new Error("Choisis au moins une carte que tu veux recevoir.");
@@ -143,6 +187,8 @@ export async function createListing(seller, { mode, item, startPrice, wantedCard
             sellerPseudo: seller.pseudo || '???',
             startPrice: price,
             currentPrice: price,
+            allowBids: !(mode === 'auction' && fixedPrice),
+            buyNowPrice: buyNow,
             highestBidderId: null,
             highestBidderPseudo: null,
             wantedCardIds: wanted,
@@ -177,6 +223,8 @@ export async function placeBid(bidder, listingId, bidAmount) {
         if (!listingDoc.exists()) throw new Error("Annonce introuvable.");
         const listing = listingDoc.data();
         if (getListingType(listing) !== 'auction') throw new Error("Cette annonce est un échange, pas une enchère.");
+        if (listing.allowBids === false) throw new Error("Cette annonce est à prix fixe : utilise « Acheter maintenant ».");
+        if (listing.buyNowPrice && amount >= listing.buyNowPrice) throw new Error(`À ce prix, utilise plutôt l'achat immédiat (${listing.buyNowPrice} pièces).`);
         if (listing.status !== 'active') throw new Error("Enchère terminée ou annulée.");
         if (listing.sellerId === bidder.uid) throw new Error("Tu ne peux pas miser sur ta propre enchère.");
         if (listing.endTime.toMillis() <= Date.now()) throw new Error("Cette enchère est terminée.");
@@ -198,6 +246,56 @@ export async function placeBid(bidder, listingId, bidAmount) {
         transaction.set(bidRef, { amount, bidderId: bidder.uid, bidderPseudo: pseudo, timestamp: Timestamp.now() });
     });
     return amount;
+}
+
+/**
+ * Achat immédiat (enchère avec prix d'achat immédiat, ou prix fixe).
+ * L'acheteur paie et reçoit l'objet tout de suite, le meilleur enchérisseur éventuel est remboursé,
+ * le vendeur reçoit le prix moins la taxe. L'annonce est terminée comme une enchère gagnée.
+ * @returns {Promise<{item, price}>}
+ */
+export async function buyNow(buyer, listingId) {
+    const buyerRef = doc(db, "users", buyer.uid);
+    const listingRef = doc(db, "auctions", listingId);
+    let result;
+    await runTransaction(db, async (transaction) => {
+        const listingDoc = await transaction.get(listingRef);
+        if (!listingDoc.exists()) throw new Error("Annonce introuvable.");
+        const listing = listingDoc.data();
+        if (listing.status !== 'active') throw new Error("Cette annonce n'est plus disponible.");
+        if (listing.endTime.toMillis() <= Date.now()) throw new Error("Cette annonce est terminée.");
+        if (listing.sellerId === buyer.uid) throw new Error("C'est ta propre annonce.");
+        if (!canBuyNow(listing)) throw new Error("L'achat immédiat n'est plus possible sur cette annonce.");
+        const price = buyNowPriceOf(listing);
+
+        const buyerDoc = await transaction.get(buyerRef);
+        const sellerRef = doc(db, "users", listing.sellerId);
+        const sellerDoc = await transaction.get(sellerRef);
+        const previousRef = listing.highestBidderId && listing.highestBidderId !== buyer.uid ? doc(db, "users", listing.highestBidderId) : null;
+        if (previousRef) await transaction.get(previousRef);
+        if (!buyerDoc.exists()) throw new Error("Utilisateur non trouvé.");
+        // Si j'étais déjà le meilleur enchérisseur, ma mise est déjà bloquée : je ne paie que la différence
+        const already = listing.highestBidderId === buyer.uid ? listing.currentPrice : 0;
+        if ((buyerDoc.data().coins || 0) < price - already) throw new Error(`Il te faut ${price - already} pièces.`);
+
+        const item = getListingItem(listing);
+        const entry = { cardId: item.cardId || null, name: describeItem(item).name, price };
+        const deal = auctionDeal(listingId);
+        const now = Timestamp.now();
+        transaction.update(buyerRef, { coins: increment(-(price - already)), [itemField(item)]: increment(item.quantity), ...bestStat(buyerDoc.data(), 'bestPurchase', entry) });
+        if (previousRef) transaction.update(previousRef, { coins: increment(listing.currentPrice), lastDeal: deal });
+        if (sellerDoc.exists()) transaction.update(sellerRef, { coins: increment(sellerProceeds(price)), lastDeal: deal,
+            'stats.cardsSoldMarket': increment(1), ...bestStat(sellerDoc.data(), 'bestSale', entry) });
+        transaction.update(listingRef, {
+            status: 'ended', soldBy: 'buyNow', currentPrice: price,
+            highestBidderId: buyer.uid, highestBidderPseudo: buyerDoc.data().pseudo || '???',
+            buyerId: buyer.uid, buyerPseudo: buyerDoc.data().pseudo || '???',
+            endedAt: now, endTime: now,
+            ...(item.type === 'card' ? { buyerGotNew: (buyerDoc.data().collection?.[item.cardId]?.quantity || 0) === 0 } : {})
+        });
+        result = { item, price };
+    });
+    return result;
 }
 
 /**

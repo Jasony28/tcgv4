@@ -2439,3 +2439,82 @@ body.stage-open { overflow: hidden; }
 .picker-card small { color: var(--text-muted); font-size: .65rem; }
 .clan-head .stats-grid { grid-template-columns: repeat(2, 1fr); }
 @media (min-width: 560px) { .clan-head .stats-grid { grid-template-columns: repeat(4, 1fr); } }
+
+/* ----------------------------------------
+   19. Hôtel des Ventes : vente (achat immédiat, prix fixe), téléphone et ordinateur
+   ---------------------------------------- */
+/* Barre de recherche : téléphone = recherche sur une ligne, tri + « Vendre » dessous ; PC = tout sur une ligne */
+.market-toolbar #market-search { width: auto; }
+@media (min-width: 760px) {
+    .market-toolbar { flex-wrap: nowrap; align-items: stretch; }
+    .market-toolbar #market-search { flex: 1 1 0; order: 0; }
+    .market-toolbar #market-sort { flex: 0 0 190px; }
+    .market-toolbar .create-listing-button.compact { order: 2; padding: 0 22px; }
+}
+.market-toolbar .create-listing-button.compact { min-height: 44px; }
+
+/* Cartes d'annonce */
+.buynow-chip { display: inline-block; margin-top: 2px; padding: 1px 8px; border-radius: 99px; font-size: .7rem; font-weight: 800;
+    color: #3d2600; background: linear-gradient(180deg, #ffe08a, #ffb020); }
+.listing-type-chip.fixed { background: rgba(52, 217, 133, 0.9); color: #05361c; }
+.listing-type-chip.auction-buynow { background: linear-gradient(180deg, #ffe08a, #ffb020); color: #3d2600; }
+
+/* Détail : encadré d'achat immédiat */
+.buynow-box { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0; padding: 12px 14px; border-radius: 14px;
+    background: linear-gradient(135deg, rgba(255, 194, 61, 0.16), rgba(255, 176, 32, 0.06)); border: 1px solid rgba(255, 194, 61, 0.45); text-align: left; }
+.buynow-box.fixed { background: linear-gradient(135deg, rgba(52, 217, 133, 0.16), rgba(52, 217, 133, 0.05)); border-color: rgba(52, 217, 133, 0.5); }
+.buynow-box > div { display: flex; flex-direction: column; }
+.buynow-box span { font-size: .78rem; color: var(--text-muted); font-weight: 700; }
+.buynow-box strong { font-size: 1.4rem; display: flex; align-items: center; gap: 6px; }
+.buynow-box button { width: auto; margin: 0; padding: 12px 18px; white-space: nowrap; }
+@media (max-width: 380px) { .buynow-box { flex-direction: column; align-items: stretch; } .buynow-box button { width: 100%; } }
+
+/* Fenêtre de mise en vente */
+.create-modal-content { max-width: 560px; padding-bottom: 0; }
+#create-body { display: block; }
+.form-step { padding: 14px; margin-bottom: 12px; border-radius: 16px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); }
+.step-label { display: flex; align-items: center; gap: 8px; }
+.step-num { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; font-size: .78rem; color: #1a1204; background: var(--gold); }
+.form-step.done .step-num { background: #34d985; color: #05361c; }
+.filter-chips.small .chip { padding: 5px 10px; font-size: .75rem; }
+.filter-chips.small { margin: 6px 0; }
+.sale-modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.sale-mode { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 6px; border-radius: 14px; text-align: center;
+    background: rgba(255, 255, 255, 0.05); border: 2px solid transparent; box-shadow: none; color: var(--text); }
+.sale-mode.active { border-color: var(--gold); background: rgba(255, 194, 61, 0.12); }
+.sale-icon { font-size: 1.5rem; }
+.sale-mode small { color: var(--text-muted); font-size: .68rem; line-height: 1.25; }
+@media (max-width: 400px) { .sale-mode small { display: none; } }
+.price-input { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 12px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border); }
+.price-input input { border: 0; background: transparent; margin: 0; padding: 12px 0; font-size: 1.15rem; font-weight: 800; width: 100%; }
+.price-input:focus-within { border-color: var(--gold); }
+.price-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.price-chips .chip { padding: 5px 10px; font-size: .75rem; }
+.toggle-row { display: flex; align-items: center; gap: 12px; margin: 14px 0 8px; padding: 10px 12px; border-radius: 12px; background: rgba(255, 194, 61, 0.07); cursor: pointer; text-align: left; }
+.toggle-row > span { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.toggle-row small { color: var(--text-muted); font-size: .75rem; }
+.market-context { margin: 10px 0 0; padding: 8px 10px; border-radius: 10px; font-size: .78rem; color: var(--text-muted); background: rgba(61, 155, 255, 0.08); text-align: left; }
+.market-context strong { color: var(--text); }
+.price-errors p { margin: 8px 0 0; font-size: .8rem; color: #ff8a7e; font-weight: 700; text-align: left; }
+.create-summary { position: sticky; bottom: 0; z-index: 2; margin: 0 -20px; padding: 12px 20px calc(14px + var(--safe-bottom));
+    background: linear-gradient(180deg, rgba(20, 30, 58, 0.92), var(--surface-2) 30%); border-top: 1px solid var(--border); backdrop-filter: blur(8px); }
+.summary-preview { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; text-align: left; }
+.summary-preview .summary-visual { width: 54px; flex-shrink: 0; }
+.summary-visual.empty { height: 76px; display: grid; place-items: center; border-radius: 8px; border: 2px dashed var(--border-strong); color: var(--text-muted); font-size: 1.4rem; }
+.summary-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.summary-text span { font-size: .85rem; }
+.summary-text small { font-size: .75rem; color: var(--text-muted); }
+.summary-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.create-summary #publish-button { width: 100%; margin: 0; }
+.pick-tile small { font-size: .62rem; }
+
+/* PC : fenêtre large en 2 colonnes (objet à gauche ; vente, prix, durée et résumé à droite) */
+@media (min-width: 960px) {
+    .create-modal-content { max-width: 980px; }
+    #create-body { display: grid; grid-template-columns: 1.15fr 1fr; column-gap: 16px; align-items: start; }
+    #create-body > .form-step:first-child { grid-row: 1 / span 4; position: sticky; top: 0; }
+    #create-body > .form-step:first-child .pick-grid { max-height: 52vh; grid-template-columns: repeat(5, 1fr); }
+    #create-body > .form-step:not(:first-child) { grid-column: 2; }
+    #create-body > .create-summary { grid-column: 2; margin: 0; border-radius: 16px; border: 1px solid var(--border); bottom: 12px; }
+    .wanted-picker { max-height: 260px; }
+}
