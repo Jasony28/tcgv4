@@ -2387,3 +2387,30 @@ body.stage-open { overflow: hidden; }
 .market-toolbar #market-sort { flex: 1; }
 .listing-type-chip.icon { width: 26px; height: 26px; padding: 0; display: grid; place-items: center; border-radius: 50%; font-size: .8rem; }
 @media (min-width: 760px) { .market-toolbar #market-search { flex: 1 1 auto; order: 0; } .market-toolbar #market-sort { flex: 0 0 180px; } }
+
+/* ----------------------------------------
+   18. Clans
+   ---------------------------------------- */
+.clan-page { width: 100%; max-width: 760px; margin: 0 auto; padding: 0 16px; }
+.clan-form { display: grid; gap: 8px; }
+@media (min-width: 560px) { .clan-form { grid-template-columns: 1fr 110px; } .clan-form #clan-desc { grid-column: 1 / -1; } .clan-head .clan-form { grid-template-columns: 1fr auto; } }
+.clan-tag-input { text-transform: uppercase; }
+.clan-list { display: grid; gap: 8px; }
+.clan-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); }
+.clan-row-info { flex: 1; display: flex; flex-direction: column; text-align: left; min-width: 0; }
+.clan-row-info small { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clan-row .profile-btn { width: auto; }
+.clan-tag { font-family: var(--font-title); color: var(--gold-light); letter-spacing: 1px; }
+.clan-tag.big { font-size: 1.6rem; }
+.clan-count { font-size: .8rem; color: var(--text-muted); }
+.clan-banner { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; text-align: left; }
+.clan-banner h3 { margin: 0; }
+.clan-banner p { margin: 2px 0 0; color: var(--text-muted); }
+.clan-create h3 small { color: var(--gold-light); font-size: .85rem; }
+.clan-link { display: inline-block; width: auto; margin: 4px auto 8px; text-decoration: none; }
+.chat-tabs { display: flex; gap: 4px; }
+.chat-tab { width: auto; padding: 6px 10px; border-radius: 10px; font-size: .82rem; background: transparent; box-shadow: none; color: var(--text-muted); }
+.chat-tab.active { background: var(--gold); color: #1a1204; }
+.chat-clan { color: var(--gold-light); font-weight: 800; }
+.chat-form[hidden] { display: none; }
+.chat-empty a { color: var(--gold-light); }

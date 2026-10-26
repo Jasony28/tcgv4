@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Clans - JWBnDr</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Outfit:wght@400;500;600;700;800&display=swap">
+    <link rel="stylesheet" href="main.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0a1224">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="JWBnDr">
+    <link rel="apple-touch-icon" href="assets/logo/logo-192.png">
+    <link rel="icon" href="assets/logo/logo-192.png">
+</head>
+<body>
+    <script src="splash.js"></script>
+    <header class="main-header"></header>
+    <main class="clan-page">
+        <h2 class="page-title">🛡️ Clans</h2>
+        <p class="page-subtitle">Joue en équipe : un clan, un chat rien qu'à vous, et un niveau commun</p>
+        <div id="clan-root"><p class="empty-msg">Chargement…</p></div>
+    </main>
+    <div id="toast-container"></div>
+    <div id="custom-modal" style="display:none;">
+      <div class="modal-content">
+        <span class="close-btn" id="custom-modal-close">&times;</span>
+        <div id="custom-modal-title"></div>
+        <div id="custom-modal-message"></div>
+        <div id="custom-modal-actions"></div>
+      </div>
+    </div>
+    <script type="module" src="header.js"></script>
+    <script type="module" src="clan.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js');
+            });
+        }
+    </script>
+</body>
+</html>

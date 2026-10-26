@@ -120,7 +120,62 @@ service cloud.firestore {
         && request.resource.data.pseudo == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.pseudo;
     }
 
-    // 5. TOUT LE RESTE : interdit
+    // 5. CLANS — chacun ne peut ajouter ou retirer que lui-même (et son compte suit dans le même lot) ;
+    //    le chef modifie la description, exclut des membres, ou passe la main en partant.
+    function clanFieldsValid() {
+      let d = request.resource.data;
+      return d.name is string && d.name.size() >= 3 && d.name.size() <= 24
+          && d.tag is string && d.tag.matches('^[A-Z0-9]{2,4}$')
+          && d.description is string && d.description.size() <= 120
+          && d.members is list && d.members.size() <= 20;
+    }
+    function myClanIdAfter() {
+      return getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('clanId', '');
+    }
+    function isClanMember(clanId) {
+      return get(/databases/$(database)/documents/clans/$(clanId)).data.members.hasAny([request.auth.uid]);
+    }
+    match /clans/{clanId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['name', 'tag', 'description', 'ownerId', 'members', 'createdAt'])
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.members == [request.auth.uid]
+        && request.resource.data.createdAt == request.time
+        && clanFieldsValid()
+        && myClanIdAfter() == clanId;
+      allow update: if isSignedIn() && clanFieldsValid() && (
+        // Rejoindre / quitter : seulement moi
+        (changedKeys().hasOnly(['members']) && onlyMyIdChanges('members')
+          && ((request.resource.data.members.hasAny([request.auth.uid]) && myClanIdAfter() == clanId)
+              || (!request.resource.data.members.hasAny([request.auth.uid]) && myClanIdAfter() != clanId)))
+        // Le chef part : il se retire et donne le clan à un membre restant
+        || (resource.data.ownerId == request.auth.uid && changedKeys().hasOnly(['members', 'ownerId'])
+          && resource.data.members.toSet().difference(request.resource.data.members.toSet()).hasOnly([request.auth.uid])
+          && request.resource.data.members.toSet().difference(resource.data.members.toSet()).size() == 0
+          && request.resource.data.members.hasAny([request.resource.data.ownerId])
+          && myClanIdAfter() != clanId)
+        // Le chef : description et exclusions (retirer des membres, jamais en ajouter, jamais lui-même)
+        || (resource.data.ownerId == request.auth.uid && changedKeys().hasOnly(['description', 'members'])
+          && request.resource.data.members.toSet().difference(resource.data.members.toSet()).size() == 0
+          && request.resource.data.members.hasAny([request.auth.uid]))
+      );
+      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid && resource.data.members.size() <= 1;
+
+      // Chat du clan : réservé aux membres
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && isClanMember(clanId);
+        allow create: if isSignedIn() && isClanMember(clanId)
+          && request.resource.data.keys().hasOnly(['uid', 'pseudo', 'text', 'createdAt'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 200
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.pseudo == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.pseudo;
+      }
+    }
+
+    // 6. TOUT LE RESTE : interdit
     match /{document=**} {
       allow read, write: if false;
     }

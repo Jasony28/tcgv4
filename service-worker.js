@@ -1,6 +1,6 @@
 // Fichier: service-worker.js
 
-const CACHE_NAME = 'tcg-gemini-cache-v9.1.0';
+const CACHE_NAME = 'tcg-gemini-cache-v9.2.0';
 // Images (cartes, boosters…) : cache à part, conservé entre les mises à jour du jeu.
 // Changer ce nom force le re-téléchargement des images (à faire si une image change sans changer de nom).
 const IMAGE_CACHE = 'tcg-images-v2';
@@ -40,6 +40,9 @@ const urlsToCache = [
     './inventaire.html',
     './sfx.js',
     './chat.js',
+    './clan.html',
+    './clan.js',
+    './clan-service.js',
     './player-level.js',
     './settings.js',
     './assets/cards3/V3_010.webp',
