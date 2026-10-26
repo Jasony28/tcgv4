@@ -2358,3 +2358,32 @@ body.stage-open { overflow: hidden; }
     .history-cards { grid-template-columns: repeat(5, minmax(0, 1fr)); }
     .history-view { max-width: 820px; margin-left: auto; margin-right: auto; }
 }
+
+/* ----------------------------------------
+   17. Hôtel des Ventes (refonte)
+   ---------------------------------------- */
+.market-views { display: flex; width: 100%; max-width: 520px; margin: 4px auto 10px; }
+.market-views .booster-tab { flex: 1; justify-content: center; padding: 9px 6px; font-size: .85rem; background: transparent; box-shadow: none; border: 0; }
+.market-views .booster-tab.active { background: var(--gold); color: #1a1204; }
+.market-toolbar .create-listing-button.compact { width: auto; max-width: none; margin: 0; padding: 0 16px; white-space: nowrap; flex-shrink: 0; }
+#market-filters[hidden] { display: none; }
+.listing-badges { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 2; display: flex; justify-content: space-between; gap: 4px; pointer-events: none; }
+.listing-badges .listing-type-chip { position: static; }
+.listing-type-chip.trade { background: rgba(61, 155, 255, 0.85); color: #fff; }
+.listing-status { padding: 2px 8px; border-radius: 99px; font-size: .66rem; font-weight: 800; white-space: nowrap; }
+.listing-status.new { background: var(--gold); color: #3d2600; }
+.listing-status.owned { background: var(--green); color: #05361c; }
+.listing-status.leading { background: linear-gradient(180deg, #ffe08a, #ffb020); color: #3d2600; }
+.listing-status.fulfil { background: #34d985; color: #05361c; }
+.listing-status.mine { background: rgba(255, 255, 255, 0.85); color: #10141c; }
+.listing-time.urgent { color: #ff6b5e; font-weight: 800; }
+.listing-collector { font-size: .66rem; color: #b996ff; font-weight: 700; }
+.listing-price small { font-size: .62rem; color: var(--text-muted); font-weight: 600; }
+.hint.good { color: #34d985; }
+.hint .bad { color: #ff6b5e; font-weight: 700; }
+#submit-bid-button:disabled { opacity: .5; }
+.market-toolbar { flex-wrap: wrap; }
+.market-toolbar #market-search { flex: 1 1 100%; order: -1; }
+.market-toolbar #market-sort { flex: 1; }
+.listing-type-chip.icon { width: 26px; height: 26px; padding: 0; display: grid; place-items: center; border-radius: 50%; font-size: .8rem; }
+@media (min-width: 760px) { .market-toolbar #market-search { flex: 1 1 auto; order: 0; } .market-toolbar #market-sort { flex: 0 0 180px; } }

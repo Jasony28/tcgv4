@@ -24,16 +24,19 @@
         <h2 class="page-title">Hôtel des Ventes</h2>
         <p class="page-subtitle">Enchères en pièces ou échanges contre des cartes</p>
 
-        <button id="create-listing-button" class="create-listing-button">+ Créer une annonce</button>
-
-        <div class="filter-chips" id="market-tabs">
-            <button class="chip active" data-tab="all">Tout</button>
-            <button class="chip" data-tab="auction">💰 Enchères</button>
-            <button class="chip" data-tab="trade">🔄 Échanges</button>
-            <button class="chip" data-tab="mine">Mes annonces</button>
-            <button class="chip" data-tab="history">📜 Historique <span id="history-dot" class="history-dot" hidden></span></button>
+        <nav class="booster-tabs market-views" id="market-tabs" aria-label="Hôtel des Ventes">
+            <button class="booster-tab active" data-tab="all">🛒 Acheter</button>
+            <button class="booster-tab" data-tab="mine">📦 Mes ventes <span id="mine-count" class="count-pill" hidden></span></button>
+            <button class="booster-tab" data-tab="history">📜 Historique <span id="history-dot" class="history-dot" hidden></span></button>
+        </nav>
+        <div class="filter-chips" id="market-filters">
+            <button class="chip active" data-filter="all">Tout</button>
+            <button class="chip" data-filter="auction">💰 Enchères</button>
+            <button class="chip" data-filter="trade">🔄 Échanges</button>
+            <button class="chip" data-filter="fulfil">✓ Je peux échanger <span id="fulfil-count" class="count-pill" hidden></span></button>
         </div>
         <div class="market-toolbar" id="market-toolbar">
+            <button id="create-listing-button" class="create-listing-button compact">+ Vendre</button>
             <input type="search" id="market-search" placeholder="Rechercher une carte, un booster…">
             <select id="market-sort" aria-label="Trier">
                 <option value="ending">Fin proche</option>

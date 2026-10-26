@@ -86,7 +86,8 @@ export async function sellCardToConsole(cardId, quantity = 1, pricePerCard = 1, 
 const grid = document.getElementById('market-grid');
 let me = null;            // données du joueur (mises à jour en direct)
 let listings = [];        // annonces actives
-let currentTab = 'all';
+let currentTab = 'all';      // vue : 'all' (acheter), 'mine', 'history'
+let currentFilter = 'all';   // filtre de la vue Acheter : 'all', 'auction', 'trade', 'fulfil'
 let searchText = '';
 let sortMode = 'ending';
 let openListingId = null;
@@ -133,7 +134,7 @@ async function initializeMarketplace() {
     await runFinalize();
     refreshHistory();
     setInterval(async () => { await runFinalize(); refreshHistory(); }, 60000);
-    setInterval(renderGrid, 30000); // compte à rebours
+    setInterval(updateTimers, 30000); // compte à rebours (sans tout redessiner)
 
     // Lien direct vers l'historique : marche.html?tab=history
     if (new URLSearchParams(location.search).get('tab') === 'history') document.querySelector('#market-tabs [data-tab="history"]').click();
@@ -163,14 +164,14 @@ async function runFinalize() {
 // ---------- Liste des annonces ----------
 
 function setupToolbar() {
-    const tabs = document.querySelectorAll('#market-tabs .chip');
+    const tabs = document.querySelectorAll('#market-tabs [data-tab]');
     tabs.forEach(tab => tab.addEventListener('click', () => {
         tabs.forEach(t => t.classList.toggle('active', t === tab));
         currentTab = tab.dataset.tab;
         const inHistory = currentTab === 'history';
         document.getElementById('history-view').hidden = !inHistory;
         document.getElementById('market-toolbar').hidden = inHistory;
-        document.getElementById('create-listing-button').hidden = inHistory;
+        document.getElementById('market-filters').hidden = currentTab !== 'all';
         grid.hidden = inHistory;
         if (inHistory) {
             document.getElementById('market-empty').hidden = true;
@@ -178,6 +179,12 @@ function setupToolbar() {
         } else {
             renderGrid();
         }
+    }));
+    const filters = document.querySelectorAll('#market-filters [data-filter]');
+    filters.forEach(chip => chip.addEventListener('click', () => {
+        filters.forEach(c => c.classList.toggle('active', c === chip));
+        currentFilter = chip.dataset.filter;
+        renderGrid();
     }));
     document.getElementById('market-search').addEventListener('input', (e) => { searchText = e.target.value.trim().toLowerCase(); renderGrid(); });
     document.getElementById('market-sort').addEventListener('change', (e) => { sortMode = e.target.value; renderGrid(); });
@@ -189,9 +196,13 @@ const canFulfill = (listing) => (listing.wantedCardIds || []).some(id => (me.col
 function visibleListings() {
     const now = Date.now();
     let list = listings.filter(l => l.endTime?.toMillis() > now);
-    if (currentTab === 'auction') list = list.filter(l => getListingType(l) === 'auction' && l.sellerId !== me.uid);
-    if (currentTab === 'trade') list = list.filter(l => getListingType(l) === 'trade' && l.sellerId !== me.uid);
     if (currentTab === 'mine') list = list.filter(l => l.sellerId === me.uid);
+    else {
+        list = list.filter(l => l.sellerId !== me.uid); // « Acheter » : les annonces des autres
+        if (currentFilter === 'auction') list = list.filter(l => getListingType(l) === 'auction');
+        if (currentFilter === 'trade') list = list.filter(l => getListingType(l) === 'trade');
+        if (currentFilter === 'fulfil') list = list.filter(l => getListingType(l) === 'trade' && canFulfill(l));
+    }
     if (searchText) {
         list = list.filter(l => {
             const names = [describeItem(getListingItem(l)).name, ...(l.wantedCardIds || []).map(id => cardLabel(findCard(id))), l.sellerPseudo || ''];
@@ -223,33 +234,80 @@ function renderGrid() {
         ? "Tu n'as aucune annonce en cours. Crée-en une avec le bouton ci-dessus !"
         : (searchText ? "Aucune annonce ne correspond à ta recherche." : "Aucune annonce pour le moment. Sois le premier à en créer une !");
 
-    grid.innerHTML = '';
-    for (const listing of list) {
-        const item = getListingItem(listing);
-        const info = describeItem(item);
-        const type = getListingType(listing);
-        const mine = listing.sellerId === me.uid;
-        const fulfil = type === 'trade' && !mine && canFulfill(listing);
-        const owned = item.type === 'card' && (me.collection?.[item.cardId]?.quantity || 0) > 0;
+    // Compteurs des onglets
+    const now = Date.now();
+    const active = listings.filter(l => l.endTime?.toMillis() > now);
+    const mineCount = active.filter(l => l.sellerId === me.uid).length;
+    const fulfilCount = active.filter(l => l.sellerId !== me.uid && getListingType(l) === 'trade' && canFulfill(l)).length;
+    const pill = (id, n) => { const el = document.getElementById(id); el.hidden = !n; el.textContent = n; };
+    pill('mine-count', mineCount);
+    pill('fulfil-count', fulfilCount);
 
+    // On garde les cartes déjà affichées qui n'ont pas changé : pas de rechargement d'images
+    const existing = new Map([...grid.children].map(el => [el.dataset.sig, el]));
+    const nodes = list.map(listing => {
+        const html = tileHTML(listing);
+        const sig = listing.id + '|' + html.length + '|' + hashString(html);
+        const keep = existing.get(sig);
+        if (keep) return keep;
         const tile = document.createElement('div');
-        tile.className = `listing-tile ${type} ${mine ? 'mine' : ''} ${fulfil ? 'can-fulfill' : ''}`;
-        const priceLine = type === 'auction'
-            ? `<span class="listing-price"><span class="coin-icon"></span>${listing.currentPrice}</span>`
-            : `<span class="listing-wanted">Contre ${(listing.wantedCardIds || []).map(id => `<img loading="lazy" src="${findCard(id)?.image || ''}" alt="">`).join('')}</span>`;
-        tile.innerHTML = `
-            <span class="listing-type-chip">${type === 'auction' ? '💰 Enchère' : '🔄 Échange'}</span>
-            ${seriesBadge(item)}
-            ${itemVisual(item)}
-            ${item.type === 'card' ? `<span class="ownership-badge ${owned ? 'owned' : 'not-owned'}">${owned ? 'Possédée' : 'Nouvelle'}</span>` : ''}
-            <div class="listing-info">
-                <strong class="listing-name">${escapeHtml(info.name)}</strong>
-                ${priceLine}
-                <span class="listing-meta">⏱ ${calculateTimeLeft(listing.endTime)} · ${mine ? 'Ton annonce' : escapeHtml(listing.sellerPseudo)}</span>
-                ${fulfil ? '<span class="fulfil-hint">✓ Tu as une carte demandée</span>' : ''}
-            </div>`;
+        tile.dataset.sig = sig;
+        tile.dataset.id = listing.id;
+        tile.className = tileClass(listing);
+        tile.innerHTML = html;
         tile.addEventListener('click', () => openListingModal(listing.id));
-        grid.appendChild(tile);
+        return tile;
+    });
+    grid.replaceChildren(...nodes);
+    updateTimers();
+}
+
+const hashString = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; };
+
+function tileClass(listing) {
+    const type = getListingType(listing);
+    const mine = listing.sellerId === me.uid;
+    const fulfil = type === 'trade' && !mine && canFulfill(listing);
+    return `listing-tile ${type} ${mine ? 'mine' : ''} ${fulfil ? 'can-fulfill' : ''}`;
+}
+
+/** Une annonce : type à gauche, statut à droite (une seule ligne de badges), visuel, infos */
+function tileHTML(listing) {
+    const item = getListingItem(listing);
+    const info = describeItem(item);
+    const type = getListingType(listing);
+    const mine = listing.sellerId === me.uid;
+    const fulfil = type === 'trade' && !mine && canFulfill(listing);
+    const owned = item.type === 'card' && (me.collection?.[item.cardId]?.quantity || 0) > 0;
+    const leading = type === 'auction' && listing.highestBidderId === me.uid;
+    const status = mine ? ['mine', 'Ton annonce']
+        : leading ? ['leading', '👑 Tu mènes']
+        : fulfil ? ['fulfil', '✓ Échangeable']
+        : item.type === 'card' ? (owned ? ['owned', 'Possédée'] : ['new', 'Nouvelle']) : null;
+    const ended = seriesBadge(item) ? '<span class="listing-collector">💎 Collector</span>' : '';
+    const priceLine = type === 'auction'
+        ? `<span class="listing-price"><span class="coin-icon"></span>${listing.currentPrice}${listing.highestBidderId ? '' : ' <small>prix de départ</small>'}</span>`
+        : `<span class="listing-wanted">Contre ${(listing.wantedCardIds || []).map(id => `<img loading="lazy" src="${findCard(id)?.image || ''}" alt="">`).join('')}</span>`;
+    return `
+        <div class="listing-badges">
+            <span class="listing-type-chip icon ${type}" title="${type === 'auction' ? 'Enchère' : 'Échange'}">${type === 'auction' ? '💰' : '🔄'}</span>
+            ${status ? `<span class="listing-status ${status[0]}">${status[1]}</span>` : ''}
+        </div>
+        ${itemVisual(item)}
+        <div class="listing-info">
+            <strong class="listing-name">${escapeHtml(info.name)}${item.quantity > 1 ? ` <small>x${item.quantity}</small>` : ''}</strong>
+            ${priceLine}
+            <span class="listing-meta"><span class="listing-time" data-end="${listing.endTime.toMillis()}"></span> · ${mine ? 'Toi' : escapeHtml(listing.sellerPseudo)}</span>
+            ${ended}
+        </div>`;
+}
+
+/** Minuteurs seuls (toutes les 30 s) : rien d'autre n'est redessiné. Rouge à moins d'une heure. */
+function updateTimers() {
+    for (const el of grid.querySelectorAll('.listing-time')) {
+        const left = Number(el.dataset.end) - Date.now();
+        el.textContent = '⏱ ' + calculateTimeLeft({ toMillis: () => Number(el.dataset.end) });
+        el.classList.toggle('urgent', left > 0 && left < 3600000);
     }
 }
 
@@ -521,8 +579,9 @@ function renderListingModal(listing) {
                 <input type="number" id="bid-amount-input" min="${minBid}" value="${minBid}" inputmode="numeric">
                 <button id="submit-bid-button">Miser</button>
             </div>
-            <div class="quick-bids">${[1, 5, 10].map(n => `<button class="chip" data-add="${n}">+${n}</button>`).join('')}</div>
-            <p class="hint">Tu as <strong>${me.coins || 0}</strong> pièces. Si quelqu'un mise plus que toi, tes pièces te sont rendues.</p>`}
+            <div class="quick-bids">${[1, 5, Math.max(10, Math.ceil(listing.currentPrice * 0.1))].map(n => `<button class="chip" data-add="${n}">+${n}</button>`).join('')}</div>
+            ${listing.highestBidderId === me.uid ? '<p class="hint good">👑 Tu es le meilleur enchérisseur. Tu peux encore monter ta mise.</p>' : ''}
+            <p class="hint" id="bid-hint">Tu as <strong>${me.coins || 0}</strong> pièces. Si quelqu'un mise plus que toi, tes pièces te sont rendues.</p>`}
             <div class="bid-history"><h4>Historique</h4><ul id="bid-history-list"><li>Chargement…</li></ul></div>`;
     } else {
         const wanted = (listing.wantedCardIds || []).map(id => {
@@ -557,9 +616,25 @@ function renderListingModal(listing) {
     `;
 
     body.querySelector('#submit-bid-button')?.addEventListener('click', () => handleBid(listing));
+    // Coût réel de la mise (si je mène déjà, je ne paie que la différence) et pièces disponibles
+    const bidInput = document.getElementById('bid-amount-input');
+    const checkBid = () => {
+        if (!bidInput) return;
+        const amount = parseInt(bidInput.value, 10) || 0;
+        const cost = listing.highestBidderId === me.uid ? amount - listing.currentPrice : amount;
+        const ok = amount > listing.currentPrice && cost <= (me.coins || 0);
+        const btn = document.getElementById('submit-bid-button');
+        btn.disabled = !ok;
+        btn.textContent = amount > listing.currentPrice ? `Miser ${amount}` : 'Miser';
+        document.getElementById('bid-hint').innerHTML = cost > (me.coins || 0)
+            ? `<span class="bad">Il te manque ${cost - (me.coins || 0)} pièces pour cette mise.</span>`
+            : `Tu as <strong>${me.coins || 0}</strong> pièces. Si quelqu'un mise plus que toi, tes pièces te sont rendues.`;
+    };
+    bidInput?.addEventListener('input', checkBid);
+    checkBid();
     body.querySelectorAll('.quick-bids .chip').forEach(btn => btn.addEventListener('click', () => {
-        const input = document.getElementById('bid-amount-input');
-        input.value = listing.currentPrice + Number(btn.dataset.add);
+        bidInput.value = listing.currentPrice + Number(btn.dataset.add);
+        checkBid();
     }));
     body.querySelectorAll('.give-button').forEach(btn => btn.addEventListener('click', () => handleGive(listing, btn.dataset.card)));
     body.querySelector('#cancel-listing-button')?.addEventListener('click', () => handleCancel(listing));
