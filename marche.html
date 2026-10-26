@@ -28,8 +28,9 @@
             <button class="chip" data-tab="auction">💰 Enchères</button>
             <button class="chip" data-tab="trade">🔄 Échanges</button>
             <button class="chip" data-tab="mine">Mes annonces</button>
+            <button class="chip" data-tab="history">📜 Historique <span id="history-dot" class="history-dot" hidden></span></button>
         </div>
-        <div class="market-toolbar">
+        <div class="market-toolbar" id="market-toolbar">
             <input type="search" id="market-search" placeholder="Rechercher une carte, un booster…">
             <select id="market-sort" aria-label="Trier">
                 <option value="ending">Fin proche</option>
@@ -41,6 +42,9 @@
 
         <p id="market-empty" class="market-empty" hidden></p>
         <div id="market-grid" class="market-grid"></div>
+
+        <!-- Historique : ventes, achats, échanges et cartes obtenues -->
+        <section id="history-view" class="history-view" hidden></section>
     </main>
 
     <!-- Détail d'une annonce -->

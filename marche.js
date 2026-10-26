@@ -12,6 +12,7 @@ import {
     createListing, placeBid, acceptTradeListing, cancelListing, finalizeExpiredListings, sellToConsole
 } from './market-service.js';
 import { seriesOfBooster, seriesOfCard, seriesStatus } from './series-config.js';
+import { loadMarketHistory, summarize, receivedCards } from './history-service.js';
 
 /** Badge « Série terminée » : l'objet n'est plus produit, il devient rare */
 function seriesBadge(item) {
@@ -92,6 +93,12 @@ let openListingId = null;
 let unsubscribeBids = null;
 let busy = false;
 
+// Historique
+let historyEvents = null;     // null = pas encore chargé
+let historyError = false;
+let historyFilter = 'all';
+let historySeenBefore = 0;    // dernière visite de l'onglet avant celle-ci (pour surligner les nouveautés)
+
 if (grid) initializeMarketplace();
 
 async function initializeMarketplace() {
@@ -124,8 +131,12 @@ async function initializeMarketplace() {
     }
 
     await runFinalize();
-    setInterval(runFinalize, 60000);
+    refreshHistory();
+    setInterval(async () => { await runFinalize(); refreshHistory(); }, 60000);
     setInterval(renderGrid, 30000); // compte à rebours
+
+    // Lien direct vers l'historique : marche.html?tab=history
+    if (new URLSearchParams(location.search).get('tab') === 'history') document.querySelector('#market-tabs [data-tab="history"]').click();
 
     // Arrivée depuis la collection : marche.html?sell=C01
     const sellId = new URLSearchParams(location.search).get('sell');
@@ -156,7 +167,17 @@ function setupToolbar() {
     tabs.forEach(tab => tab.addEventListener('click', () => {
         tabs.forEach(t => t.classList.toggle('active', t === tab));
         currentTab = tab.dataset.tab;
-        renderGrid();
+        const inHistory = currentTab === 'history';
+        document.getElementById('history-view').hidden = !inHistory;
+        document.getElementById('market-toolbar').hidden = inHistory;
+        document.getElementById('create-listing-button').hidden = inHistory;
+        grid.hidden = inHistory;
+        if (inHistory) {
+            document.getElementById('market-empty').hidden = true;
+            openHistory();
+        } else {
+            renderGrid();
+        }
     }));
     document.getElementById('market-search').addEventListener('input', (e) => { searchText = e.target.value.trim().toLowerCase(); renderGrid(); });
     document.getElementById('market-sort').addEventListener('change', (e) => { sortMode = e.target.value; renderGrid(); });
@@ -194,7 +215,7 @@ function visibleListings() {
 }
 
 function renderGrid() {
-    if (!me) return;
+    if (!me || currentTab === 'history') return;
     const list = visibleListings();
     const empty = document.getElementById('market-empty');
     empty.hidden = list.length > 0;
@@ -230,6 +251,225 @@ function renderGrid() {
         tile.addEventListener('click', () => openListingModal(listing.id));
         grid.appendChild(tile);
     }
+}
+
+// ---------- Historique ----------
+
+const HISTORY_FILTERS = [
+    { key: 'all', label: 'Tout' },
+    { key: 'sales', label: '💰 Ventes' },
+    { key: 'purchases', label: '🛒 Achats' },
+    { key: 'trades', label: '🔄 Échanges' },
+    { key: 'cards', label: '🃏 Cartes obtenues' }
+];
+const HISTORY_ICONS = { sale: '💰', purchase: '🛒', 'market-trade': '🔄', 'friend-trade': '🤝', unsold: '↩️', cancelled: '✖️', refunded: '💸' };
+// Événements provoqués par un autre joueur ou par la fin d'une annonce (ceux qui méritent une pastille)
+const NOTIFY_KINDS = ['sale', 'purchase', 'market-trade', 'friend-trade', 'unsold', 'refunded'];
+
+const seenKey = () => `marketHistorySeen_${me.uid}`;
+function getSeen() {
+    try { return Number(localStorage.getItem(seenKey())) || 0; } catch { return 0; }
+}
+function setSeen(t) {
+    try { localStorage.setItem(seenKey(), String(t)); } catch { /* navigation privée */ }
+}
+
+/** Recharge l'historique en arrière-plan et met à jour la pastille de l'onglet. */
+async function refreshHistory() {
+    if (!me) return;
+    try {
+        historyEvents = await loadMarketHistory(me.uid);
+        historyError = false;
+    } catch (e) {
+        console.error("Erreur historique :", e);
+        historyError = historyEvents === null;
+    }
+    updateHistoryDot();
+    if (currentTab === 'history') renderHistory();
+}
+
+function updateHistoryDot() {
+    const dot = document.getElementById('history-dot');
+    if (!dot || !historyEvents) return;
+    // Première visite : on ne marque pas tout l'ancien historique comme nouveau
+    if (!getSeen()) setSeen(Date.now());
+    const fresh = currentTab === 'history' ? 0
+        : historyEvents.filter(e => NOTIFY_KINDS.includes(e.kind) && e.time > getSeen()).length;
+    dot.hidden = fresh === 0;
+    dot.textContent = fresh > 9 ? '9+' : String(fresh);
+}
+
+function openHistory() {
+    historySeenBefore = getSeen();
+    setSeen(Date.now());
+    updateHistoryDot();
+    renderHistory();
+    refreshHistory();
+}
+
+/** Libellé du jour : Aujourd'hui, Hier, ou « lundi 20 octobre » */
+function dayLabel(time) {
+    if (!time) return 'Date inconnue';
+    const d = new Date(time);
+    const today = new Date();
+    const startOf = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const diffDays = Math.round((startOf(today) - startOf(d)) / 86400000);
+    if (diffDays === 0) return "Aujourd'hui";
+    if (diffDays === 1) return 'Hier';
+    const label = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', ...(d.getFullYear() !== today.getFullYear() ? { year: 'numeric' } : {}) });
+    return label.charAt(0).toUpperCase() + label.slice(1);
+}
+const hourLabel = (time) => time ? new Date(time).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
+
+/** Nom d'un objet avec sa quantité : « Nicolas (V2) x2 » */
+function itemName(item) {
+    const name = describeItem(item).name;
+    return item.quantity > 1 ? `${name} x${item.quantity}` : name;
+}
+
+/** Petite vignette d'un objet (carte ou booster) */
+function historyThumb(item, isNew) {
+    const info = describeItem(item);
+    const qty = item.quantity > 1 ? `<span class="thumb-qty">x${item.quantity}</span>` : '';
+    const newTag = isNew ? '<span class="thumb-new" title="Nouvelle carte">✨</span>' : '';
+    if (item.type === 'card') {
+        return `<span class="history-thumb card-thumb ${rarityClass(info.rarity)}" title="${escapeHtml(info.name)}">
+            <img src="${info.image}" alt="${escapeHtml(info.name)}" loading="lazy">${qty}${newTag}</span>`;
+    }
+    return `<span class="history-thumb booster-thumb ${item.boosterType || ''}" title="${escapeHtml(info.name)}">
+        <img src="${info.image}" alt="${escapeHtml(info.name)}" loading="lazy">${qty}</span>`;
+}
+
+function historyText(e) {
+    const p = `<strong>${escapeHtml(e.partner)}</strong>`;
+    const gave = e.gave[0], got = e.got[0];
+    switch (e.kind) {
+        case 'sale':
+            return { title: `${p} a acheté ton ${escapeHtml(itemName(gave))}`,
+                sub: `Vendu ${e.price} pièces · tu as reçu ${e.coins} après la taxe` };
+        case 'purchase':
+            return { title: `Tu as remporté ${escapeHtml(itemName(got))}`, sub: `Enchère de ${p} · payé ${e.price} pièces` };
+        case 'market-trade':
+            return { title: `Échange avec ${p}`, sub: 'Échange à l’Hôtel des Ventes' };
+        case 'friend-trade':
+            return { title: `Échange avec ${p}`, sub: 'Échange entre amis' };
+        case 'unsold':
+            return { title: `${escapeHtml(itemName(gave))} n'a pas trouvé preneur`, sub: 'Rendu dans ton inventaire' };
+        case 'cancelled':
+            return { title: `Tu as annulé ton annonce`, sub: escapeHtml(itemName(gave)) };
+        case 'refunded':
+            return { title: `${p} a annulé son annonce`, sub: `${escapeHtml(itemName(gave))} · tes ${e.price} pièces t'ont été rendues` };
+        default:
+            return { title: '', sub: '' };
+    }
+}
+
+function historyRow(e) {
+    const { title, sub } = historyText(e);
+    const isTrade = e.kind === 'market-trade' || e.kind === 'friend-trade';
+    const coinsHtml = e.coins ? `<span class="history-coins ${e.coins > 0 ? 'plus' : 'minus'}">${e.coins > 0 ? '+' : '−'}${Math.abs(e.coins)}<span class="coin-icon"></span></span>` : '';
+    const thumbs = (items) => items.length ? items.map(it => historyThumb(it, it.type === 'card' && e.newCards.includes(it.cardId))).join('') : '<span class="history-nothing">—</span>';
+    let visuals = '';
+    if (isTrade) {
+        visuals = `<div class="history-swap">
+            <div class="swap-side"><span class="swap-label">Donné</span><div class="swap-thumbs">${thumbs(e.gave)}</div></div>
+            <span class="swap-arrow" aria-hidden="true">→</span>
+            <div class="swap-side"><span class="swap-label">Reçu</span><div class="swap-thumbs">${thumbs(e.got)}</div></div>
+        </div>`;
+    } else {
+        const items = e.got.length ? e.got : e.gave;
+        visuals = `<div class="swap-thumbs">${thumbs(items)}</div>`;
+    }
+    const fresh = e.time > historySeenBefore && historySeenBefore > 0 && NOTIFY_KINDS.includes(e.kind);
+    return `<article class="history-item kind-${e.kind} ${fresh ? 'fresh' : ''}">
+        <span class="history-icon" aria-hidden="true">${HISTORY_ICONS[e.kind] || '•'}</span>
+        <div class="history-body">
+            <p class="history-title">${title}</p>
+            <p class="history-sub">${sub}</p>
+            ${visuals}
+        </div>
+        <div class="history-side">
+            ${coinsHtml}
+            <span class="history-time">${hourLabel(e.time)}</span>
+            ${fresh ? '<span class="history-fresh">Nouveau</span>' : ''}
+        </div>
+    </article>`;
+}
+
+function renderHistoryCards(events) {
+    const cards = receivedCards(events);
+    if (!cards.length) return `<p class="market-empty">Tu n'as encore reçu aucune carte au marché ou par échange.</p>`;
+    return `<div class="history-cards">${cards.map(c => {
+        const card = findCard(c.cardId);
+        const name = card ? cardLabel(card) : c.cardId;
+        return `<div class="history-card ${c.isNew ? 'is-new' : ''}">
+            <div class="card ${rarityClass(card?.rarity)}"><img class="card-image" src="${card?.image || ''}" alt="${escapeHtml(name)}" loading="lazy">
+                ${c.quantity > 1 ? `<span class="card-quantity">x${c.quantity}</span>` : ''}</div>
+            ${c.isNew ? '<span class="history-new-badge">✨ Nouvelle</span>' : ''}
+            <strong>${escapeHtml(name)}</strong>
+            <small>${c.from.length ? 'de ' + c.from.map(escapeHtml).join(', ') : ''}</small>
+            <small>${dayLabel(c.lastTime)}</small>
+        </div>`;
+    }).join('')}</div>
+    <p class="hint history-hint">Le badge ✨ Nouvelle s'affiche sur les cartes que tu n'avais pas encore, pour tout ce que tu obtiens à partir de maintenant.</p>`;
+}
+
+function renderHistory() {
+    const view = document.getElementById('history-view');
+    if (!view || currentTab !== 'history') return;
+    if (historyEvents === null) {
+        view.innerHTML = historyError
+            ? `<p class="market-empty">Impossible de charger l'historique. Vérifie ta connexion et réessaie.</p>`
+            : `<p class="market-empty">Chargement de ton historique…</p>`;
+        return;
+    }
+
+    const s = summarize(historyEvents);
+    const filters = {
+        all: () => true,
+        sales: (e) => e.kind === 'sale' || e.kind === 'unsold',
+        purchases: (e) => e.kind === 'purchase' || e.kind === 'refunded',
+        trades: (e) => e.kind === 'market-trade' || e.kind === 'friend-trade'
+    };
+
+    let content;
+    if (historyFilter === 'cards') {
+        content = renderHistoryCards(historyEvents);
+    } else {
+        const list = historyEvents.filter(filters[historyFilter]);
+        if (!list.length) {
+            content = `<p class="market-empty">${historyEvents.length ? 'Rien dans cette catégorie pour le moment.' : "Ton historique est vide. Vends, achète ou échange une carte et tout s'affichera ici !"}</p>`;
+        } else {
+            const groups = [];
+            for (const e of list) {
+                const label = dayLabel(e.time);
+                if (!groups.length || groups[groups.length - 1].label !== label) groups.push({ label, items: [] });
+                groups[groups.length - 1].items.push(e);
+            }
+            content = groups.map(g => `<h4 class="history-day">${g.label}</h4>${g.items.map(historyRow).join('')}`).join('');
+        }
+    }
+
+    view.innerHTML = `
+        <div class="history-summary">
+            <div class="summary-tile"><span>Pièces gagnées</span><strong class="plus">+${s.earned}<span class="coin-icon"></span></strong></div>
+            <div class="summary-tile"><span>Pièces dépensées</span><strong class="minus">−${s.spent}<span class="coin-icon"></span></strong></div>
+            <div class="summary-tile"><span>Cartes reçues</span><strong>${s.cardsReceived}</strong></div>
+            <div class="summary-tile"><span>Ventes · Achats · Échanges</span><strong>${s.sales} · ${s.purchases} · ${s.trades}</strong></div>
+        </div>
+        <div class="filter-chips history-filters">${HISTORY_FILTERS.map(f =>
+            `<button class="chip ${historyFilter === f.key ? 'active' : ''}" data-hfilter="${f.key}">${f.label}</button>`).join('')}</div>
+        <div class="history-list">${content}</div>`;
+
+    // Le filtre choisi reste visible dans la barre qui défile (sans faire bouger la page)
+    const bar = view.querySelector('.history-filters');
+    const active = bar.querySelector('.chip.active');
+    if (active) bar.scrollLeft = active.offsetLeft - (bar.clientWidth - active.offsetWidth) / 2;
+
+    view.querySelectorAll('[data-hfilter]').forEach(b => b.addEventListener('click', () => {
+        historyFilter = b.dataset.hfilter;
+        renderHistory();
+    }));
 }
 
 // ---------- Détail d'une annonce ----------
@@ -357,6 +597,7 @@ async function handleGive(listing, cardId) {
         await acceptTradeListing(me, listing.id, cardId);
         showToast('success', `🔄 Échange réussi ! Tu as reçu ${itemName}.`);
         closeListingModal();
+        refreshHistory();
         const item = getListingItem(listing);
         if (item.type === 'card') updateQuestProgress('obtain_10_diff_cards_24h', 1, { cardId: item.cardId });
     } catch (e) {
@@ -378,6 +619,7 @@ async function handleCancel(listing) {
         await cancelListing(me, listing.id);
         showToast('success', "Annonce annulée, l'objet t'a été rendu.");
         closeListingModal();
+        refreshHistory();
     } catch (e) {
         showToast('error', e.message || "Erreur lors de l'annulation.");
     }
