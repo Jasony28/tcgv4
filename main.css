@@ -2414,3 +2414,28 @@ body.stage-open { overflow: hidden; }
 .chat-clan { color: var(--gold-light); font-weight: 800; }
 .chat-form[hidden] { display: none; }
 .chat-empty a { color: var(--gold-light); }
+.emblem-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.emblem { width: 42px; height: 42px; padding: 0; font-size: 1.3rem; border-radius: 12px; background: rgba(255, 255, 255, 0.06); box-shadow: none; border: 2px solid transparent; }
+.emblem.active { border-color: var(--gold); background: rgba(255, 194, 61, 0.15); }
+.clan-emblem { font-size: 1.4rem; }
+.clan-emblem.big { font-size: 2.6rem; }
+.clan-rank { min-width: 28px; font-weight: 800; color: var(--text-muted); text-align: center; }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.section-head .profile-btn { width: auto; }
+.request-list { display: grid; gap: 8px; }
+.request-row { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); }
+.request-row.mine { background: rgba(255, 194, 61, 0.08); }
+.request-row.done { opacity: .6; }
+.request-card { width: 46px; flex-shrink: 0; }
+.request-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; text-align: left; }
+.request-info small { color: var(--text-muted); }
+.request-row .profile-btn { width: auto; white-space: nowrap; }
+.request-state { font-size: .78rem; font-weight: 700; color: #34d985; white-space: nowrap; }
+.request-state.muted { color: var(--text-muted); font-weight: 600; }
+.chief-tools { margin-top: 10px; }
+.picker-sheet { max-height: 85vh; display: flex; flex-direction: column; }
+.picker-grid { overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px; padding: 4px 2px 10px; }
+.picker-card { display: flex; flex-direction: column; gap: 3px; padding: 6px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); box-shadow: none; color: var(--text); font-size: .72rem; text-align: center; }
+.picker-card small { color: var(--text-muted); font-size: .65rem; }
+.clan-head .stats-grid { grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 560px) { .clan-head .stats-grid { grid-template-columns: repeat(4, 1fr); } }

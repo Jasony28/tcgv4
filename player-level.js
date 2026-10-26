@@ -9,7 +9,8 @@ export const XP_RULES = [
     { key: 'market', label: 'Vente à l\'Hôtel des Ventes', xp: 25 },
     { key: 'console', label: 'Carte vendue à la console', xp: 2 },
     { key: 'trades', label: 'Échange avec un ami', xp: 40 },
-    { key: 'achievements', label: 'Succès obtenu', xp: 100 }
+    { key: 'achievements', label: 'Succès obtenu', xp: 100 },
+    { key: 'donations', label: 'Carte donnée à ton clan', xp: 15 }
 ];
 export const MAX_PLAYER_LEVEL = 99;
 
@@ -22,7 +23,8 @@ export function xpCounters(userData) {
         market: s.cardsSoldMarket || 0,
         console: s.cardsSoldConsole || 0,
         trades: s.friendTrades || 0,
-        achievements: countClaimedAchievements(userData)
+        achievements: countClaimedAchievements(userData),
+        donations: s.clanDonations || 0
     };
 }
 

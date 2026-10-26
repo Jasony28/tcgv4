@@ -4,19 +4,28 @@
 // correspond plus (exclu par le chef) est simplement ignoré puis nettoyé.
 // Chaque action écrit le clan ET le compte en un seul lot (writeBatch) : les règles Firestore
 // vérifient que les deux restent cohérents.
-import { collection, doc, getDoc, getDocs, writeBatch, arrayUnion, arrayRemove, increment, serverTimestamp, deleteField } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+import { collection, doc, getDoc, getDocs, writeBatch, arrayUnion, arrayRemove, increment, serverTimestamp, deleteField, query, orderBy, limit, runTransaction } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
 import { playerLevel } from './player-level.js';
+import { findCard } from './market-service.js';
+import { getDayKey } from './daily-utils.js';
 
 export const CLAN_COST = 100;
 export const MAX_MEMBERS = 20;
+export const EMBLEMS = ['🛡️', '🐺', '🐉', '🦅', '⚡', '🔥', '🌊', '🌙', '💀', '👑', '🦁', '🍀'];
+
+// Demandes de cartes : 1 par jour et par joueur ; les autres donnent leurs doubles
+export const REQUEST_NEEDED = { 'Commune': 4, 'Rare': 2, 'epique': 1 };   // exemplaires demandés (pas de légendaire)
+export const DONATION_REWARD = { 'Commune': 5, 'Rare': 15, 'epique': 40 }; // pièces pour le donateur
+export const REQUEST_DURATION_MS = 24 * 3600 * 1000;
 
 /** Vérifie et nettoie nom / tag / description */
-export function validateClan({ name, tag, description = '' }) {
+export function validateClan({ name, tag, description = '', emblem = EMBLEMS[0] }) {
     const clean = {
         name: String(name || '').trim().replace(/\s+/g, ' '),
         tag: String(tag || '').trim().toUpperCase(),
-        description: String(description || '').trim().slice(0, 120)
+        description: String(description || '').trim().slice(0, 120),
+        emblem: EMBLEMS.includes(emblem) ? emblem : EMBLEMS[0]
     };
     if (clean.name.length < 3 || clean.name.length > 24) throw new Error("Le nom du clan doit faire entre 3 et 24 caractères.");
     if (!/^[A-Z0-9]{2,4}$/.test(clean.tag)) throw new Error("Le tag doit faire 2 à 4 lettres ou chiffres (ex : JWB).");
@@ -108,8 +117,71 @@ export async function clanDetails(clan) {
     const members = snaps.filter(s => s?.exists()).map(s => {
         const u = s.data();
         const lv = playerLevel(u);
-        return { uid: s.id, pseudo: u.pseudo || 'Joueur', level: lv.level, xp: lv.xp, lastOnline: u.lastOnline || null, owner: s.id === clan.ownerId };
+        return { uid: s.id, pseudo: u.pseudo || 'Joueur', level: lv.level, xp: lv.xp, lastOnline: u.lastOnline || null, owner: s.id === clan.ownerId, donations: u.stats?.clanDonations || 0 };
     }).sort((a, b) => (b.owner - a.owner) || b.xp - a.xp);
     const xp = members.reduce((n, m) => n + m.xp, 0);
     return { members, xp, level: Math.floor(Math.sqrt(xp / 200)) + 1 };
+}
+
+/** Classement des clans par XP totale de leurs membres */
+export async function rankClans(clans) {
+    const details = await Promise.all(clans.map(c => clanDetails(c).then(d => ({ ...c, xp: d.xp, level: d.level }))));
+    return details.sort((a, b) => b.xp - a.xp);
+}
+
+/** Demander une carte au clan (1 par jour, pas de légendaire) */
+export async function createCardRequest(uid, clanId, cardId) {
+    const card = findCard(cardId);
+    if (!card || card.upcoming) throw new Error("Carte inconnue.");
+    if (!REQUEST_NEEDED[card.rarity]) throw new Error("Les légendaires ne peuvent pas être demandées.");
+    const userRef = doc(db, 'users', uid);
+    const user = (await getDoc(userRef)).data() || {};
+    if (user.lastClanRequestDay === getDayKey()) throw new Error("Tu as déjà fait ta demande aujourd'hui. Reviens demain !");
+    const clan = await getMyClan({ uid, ...user });
+    if (!clan || clan.id !== clanId) throw new Error("Tu n'es pas dans ce clan.");
+    const ref = doc(collection(db, 'clans', clanId, 'requests'));
+    const batch = writeBatch(db);
+    batch.set(ref, { uid, pseudo: user.pseudo || 'Joueur', cardId, needed: REQUEST_NEEDED[card.rarity], received: 0, donors: {}, createdAt: serverTimestamp() });
+    batch.update(userRef, { lastClanRequestDay: getDayKey(), lastClanRequestAt: serverTimestamp() });
+    await batch.commit();
+    return ref.id;
+}
+
+/** Demandes des dernières 24 h (les plus récentes d'abord) */
+export async function listCardRequests(clanId) {
+    const snap = await getDocs(query(collection(db, 'clans', clanId, 'requests'), orderBy('createdAt', 'desc'), limit(40)));
+    const now = Date.now();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .filter(r => now - (r.createdAt?.toMillis?.() || now) < REQUEST_DURATION_MS);
+}
+
+/**
+ * Donner un exemplaire (le donateur garde toujours au moins 1 exemplaire).
+ * La carte va au demandeur, le donateur gagne des pièces et une statistique de dons.
+ * @returns {Promise<number>} pièces gagnées
+ */
+export async function donateCard(donorUid, clanId, requestId) {
+    const reqRef = doc(db, 'clans', clanId, 'requests', requestId);
+    const donorRef = doc(db, 'users', donorUid);
+    let reward = 0;
+    await runTransaction(db, async (t) => {
+        const reqSnap = await t.get(reqRef);
+        if (!reqSnap.exists()) throw new Error("Demande introuvable.");
+        const req = reqSnap.data();
+        const clanSnap = await t.get(doc(db, 'clans', clanId));
+        const donor = (await t.get(donorRef)).data() || {};
+        const requesterRef = doc(db, 'users', req.uid);
+        const requester = await t.get(requesterRef);
+        if (req.uid === donorUid) throw new Error("Tu ne peux pas donner à ta propre demande.");
+        if (!(clanSnap.data()?.members || []).includes(donorUid) || !(clanSnap.data()?.members || []).includes(req.uid)) throw new Error("Vous n'êtes plus dans le même clan.");
+        if (Date.now() - (req.createdAt?.toMillis?.() || 0) > REQUEST_DURATION_MS) throw new Error("Cette demande a expiré.");
+        if (req.received >= req.needed) throw new Error("Cette demande est déjà complète.");
+        if ((donor.collection?.[req.cardId]?.quantity || 0) < 2) throw new Error("Il te faut au moins un double de cette carte pour la donner.");
+        if (!requester.exists()) throw new Error("Ce joueur n'existe plus.");
+        reward = DONATION_REWARD[findCard(req.cardId)?.rarity] || 5;
+        t.update(reqRef, { received: increment(1), [`donors.${donorUid}`]: increment(1) });
+        t.update(donorRef, { [`collection.${req.cardId}.quantity`]: increment(-1), coins: increment(reward), 'stats.clanDonations': increment(1) });
+        t.update(requesterRef, { [`collection.${req.cardId}.quantity`]: increment(1), lastDeal: { kind: 'clanRequest', clan: clanId, id: requestId } });
+    });
+    return reward;
 }

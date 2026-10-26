@@ -50,7 +50,7 @@ service cloud.firestore {
           && changedKeys().hasOnly(['coins', 'collection', 'boosterInventory', 'displayInventory', 'stats', 'lastDeal'])
           && deal is map
           && deal.get('id', '') is string && deal.get('id', '') != ''
-          && (auctionDeal(deal, userId) || tradeDeal(deal, userId));
+          && (auctionDeal(deal, userId) || tradeDeal(deal, userId) || clanRequestDeal(deal, userId));
     }
 
     // Enchère / annonce d'échange : il était vendeur ou meilleur enchérisseur, j'y participe après la
@@ -64,6 +64,17 @@ service cloud.firestore {
           && after != before
           && [before.sellerId, before.get('highestBidderId', '')].hasAny([userId])
           && [after.sellerId, after.get('highestBidderId', ''), after.get('buyerId', '')].hasAny([request.auth.uid]);
+    }
+
+    // Don de carte dans un clan : il est l'auteur de la demande, et j'y ajoute mon don en même temps
+    function clanRequestDeal(deal, userId) {
+      let path = /databases/$(database)/documents/clans/$(deal.clan)/requests/$(deal.id);
+      let before = get(path).data;
+      let after = getAfter(path).data;
+      return deal.kind == 'clanRequest'
+          && before.uid == userId && request.auth.uid != userId
+          && after.received == before.received + 1
+          && after.donors.get(request.auth.uid, 0) == before.donors.get(request.auth.uid, 0) + 1;
     }
 
     // Échange entre amis : nous sommes les deux participants et il passe à « completed » maintenant
@@ -127,6 +138,7 @@ service cloud.firestore {
       return d.name is string && d.name.size() >= 3 && d.name.size() <= 24
           && d.tag is string && d.tag.matches('^[A-Z0-9]{2,4}$')
           && d.description is string && d.description.size() <= 120
+          && d.get('emblem', '') is string && d.get('emblem', '').size() <= 4
           && d.members is list && d.members.size() <= 20;
     }
     function myClanIdAfter() {
@@ -138,7 +150,7 @@ service cloud.firestore {
     match /clans/{clanId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn()
-        && request.resource.data.keys().hasOnly(['name', 'tag', 'description', 'ownerId', 'members', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['name', 'tag', 'description', 'emblem', 'ownerId', 'members', 'createdAt'])
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.members == [request.auth.uid]
         && request.resource.data.createdAt == request.time
@@ -161,6 +173,30 @@ service cloud.firestore {
           && request.resource.data.members.hasAny([request.auth.uid]))
       );
       allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid && resource.data.members.size() <= 1;
+
+      // Demandes de cartes : 1 demande à la fois par joueur (au moins 6 h d'écart, le jeu limite à 1 par jour).
+      // Un don = +1 reçu, mon compteur de dons +1, et je perds vraiment un exemplaire de la carte.
+      match /requests/{requestId} {
+        allow read: if isSignedIn() && isClanMember(clanId);
+        allow create: if isSignedIn() && isClanMember(clanId)
+          && request.resource.data.keys().hasOnly(['uid', 'pseudo', 'cardId', 'needed', 'received', 'donors', 'createdAt'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.cardId is string
+          && request.resource.data.needed is int && request.resource.data.needed >= 1 && request.resource.data.needed <= 4
+          && request.resource.data.received == 0 && request.resource.data.donors == {}
+          && request.resource.data.createdAt == request.time
+          && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.lastClanRequestAt == request.time
+          && (!('lastClanRequestAt' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data)
+              || request.time > get(/databases/$(database)/documents/users/$(request.auth.uid)).data.lastClanRequestAt + duration.value(6, 'h'));
+        allow update: if isSignedIn() && isClanMember(clanId) && request.auth.uid != resource.data.uid
+          && changedKeys().hasOnly(['received', 'donors'])
+          && request.resource.data.received == resource.data.received + 1
+          && request.resource.data.received <= resource.data.needed
+          && request.resource.data.donors.diff(resource.data.donors).affectedKeys().hasOnly([request.auth.uid])
+          && request.resource.data.donors.get(request.auth.uid, 0) == resource.data.donors.get(request.auth.uid, 0) + 1
+          && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.collection[resource.data.cardId].quantity
+             == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.collection[resource.data.cardId].quantity - 1;
+      }
 
       // Chat du clan : réservé aux membres
       match /messages/{messageId} {
