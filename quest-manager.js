@@ -1,9 +1,11 @@
-import { doc, runTransaction, increment } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+import { doc, runTransaction } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
 import { questsConfig, dailyQuestPool, getDailyQuestIds, getLevel } from './battlepass-config.js';
 import { getAuth } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
 import { getDayKey, getWeekKey } from './daily-utils.js';
 import { showToast } from './toast.js';
+import { isBoosterProduced, BOOSTER_COIN_VALUE } from './series-config.js';
+import { econWrite } from './econ-service.js';
 
 /**
  * Plus longue série de jours consécutifs dans une liste de dates (format toDateString).
@@ -135,7 +137,7 @@ export async function updateQuestProgress(actionType, value = 1, extra = {}) {
       levelAfter = getLevel(bp.xp);
       // Les quêtes rapportent aussi des pièces
       const coinsEarned = completedQuests.reduce((sum, q) => sum + (q.coins || 0), 0);
-      transaction.update(userRef, coinsEarned > 0 ? { battlePass: bp, coins: increment(coinsEarned) } : { battlePass: bp });
+      econWrite(transaction, userRef, userDoc.data(), { coins: coinsEarned }, { battlePass: bp });
     });
 
     for (const q of completedQuests) {
@@ -147,4 +149,40 @@ export async function updateQuestProgress(actionType, value = 1, extra = {}) {
   } catch (e) {
     console.error("La transaction de mise à jour de quête a échoué : ", e);
   }
+}
+
+// Types de récompenses du Pass → type de booster
+const BOOSTER_REWARDS = { classic_booster: 'classic', legendary_booster: 'legendary', v2_booster: 'v2', v3_booster: 'v3', v3_legendary_booster: 'v3_legendary' };
+
+/**
+ * Récupère des récompenses du Pass en une seule transaction.
+ * @param {object} drawnCards - pour les récompenses « carte aléatoire » : { palier: carte } (tirées avant la transaction)
+ */
+export async function claimPassRewards(uid, rewards, drawnCards = {}) {
+  const userRef = doc(db, "users", uid);
+  await runTransaction(db, async (transaction) => {
+    const userDoc = await transaction.get(userRef);
+    if (!userDoc.exists()) throw new Error("Utilisateur non trouvé.");
+    const pass = userDoc.data().battlePass || {};
+    if (pass.seasonId !== getWeekKey()) throw new Error("Nouvelle saison ! Recharge la page.");
+    const level = getLevel(pass.xp);
+
+    const extra = {};
+    const deltas = {}; // cumul par champ (ex: 2 récompenses pièces => une seule écriture)
+    const add = (field, n) => { deltas[field] = (deltas[field] || 0) + n; };
+    for (const reward of rewards) {
+      if (reward.step > level) throw new Error(`Niveau ${reward.step} pas encore atteint.`);
+      if (pass.claimedRewards?.[reward.step]) throw new Error(`Récompense ${reward.step} déjà réclamée.`);
+      if (reward.type === 'coins') add('coins', reward.value);
+      else if (BOOSTER_REWARDS[reward.type]) {
+        // Booster d'une série terminée : remplacé par sa valeur en pièces
+        const type = BOOSTER_REWARDS[reward.type];
+        if (isBoosterProduced(type)) add(`boosterInventory.${type}`, reward.value);
+        else add('coins', reward.value * BOOSTER_COIN_VALUE[type]);
+      }
+      else if (reward.type === 'random_card') add(`collection.${drawnCards[reward.step].id}.quantity`, 1);
+      extra[`battlePass.claimedRewards.${reward.step}`] = true;
+    }
+    econWrite(transaction, userRef, userDoc.data(), deltas, extra);
+  });
 }

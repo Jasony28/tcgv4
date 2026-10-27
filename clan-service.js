@@ -6,6 +6,7 @@
 // vérifient que les deux restent cohérents.
 import { collection, doc, getDoc, getDocs, writeBatch, arrayUnion, arrayRemove, increment, serverTimestamp, deleteField, query, orderBy, limit, runTransaction } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
+import { econWrite, dealStamp } from './econ-service.js';
 import { playerLevel } from './player-level.js';
 import { findCard } from './market-service.js';
 import { getDayKey } from './daily-utils.js';
@@ -180,8 +181,8 @@ export async function donateCard(donorUid, clanId, requestId) {
         if (!requester.exists()) throw new Error("Ce joueur n'existe plus.");
         reward = DONATION_REWARD[findCard(req.cardId)?.rarity] || 5;
         t.update(reqRef, { received: increment(1), [`donors.${donorUid}`]: increment(1) });
-        t.update(donorRef, { [`collection.${req.cardId}.quantity`]: increment(-1), coins: increment(reward), 'stats.clanDonations': increment(1) });
-        t.update(requesterRef, { [`collection.${req.cardId}.quantity`]: increment(1), lastDeal: { kind: 'clanRequest', clan: clanId, id: requestId } });
+        econWrite(t, donorRef, donor, { [`collection.${req.cardId}.quantity`]: -1, coins: reward }, { 'stats.clanDonations': increment(1) });
+        t.update(requesterRef, { [`collection.${req.cardId}.quantity`]: increment(1), lastDeal: dealStamp('clanRequest', requestId, { clan: clanId }) });
     });
     return reward;
 }

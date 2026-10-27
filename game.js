@@ -1,4 +1,4 @@
-import { updateDoc, doc, getDoc, Timestamp, runTransaction, increment } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+import { doc, getDoc } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
 import { protectPage } from './auth-manager.js';
 import { allCardsV2 } from './cards1.js';
@@ -9,7 +9,7 @@ import { showToast, showConfirmDialog } from './toast.js';
 import { getDayKey } from './daily-utils.js';
 import { playBoosterOpening } from './booster-animation.js';
 import { SHOP_DISPLAYS } from './shop-config.js';
-import { openDisplay, keepDailyBooster } from './inventory-service.js';
+import { openDisplay, keepDailyBooster, saveOpenedBooster, resetDailyCounters } from './inventory-service.js';
 import { seriesOfBooster, seriesStatus, isBoosterProduced, daysUntilEnd, mainDailyBoosterType, seriesAnnouncements } from './series-config.js';
 import { DAILY_BOOSTER_LIMIT, DAILY_V2_BOOSTER_LIMIT, LEGENDARY_CHANCE, drawClassicBoosterCards, drawLegendaryBoosterCards } from './booster-draws.js';
 
@@ -318,7 +318,7 @@ async function openBooster(boosterType) {
 
     // Si l'enregistrement échoue, l'erreur remonte à handleOpenBooster : on n'affiche
     // pas des cartes qui n'ont pas été ajoutées à la collection.
-    await updateUserAfterBoosterOpen(boosterType, drawnCards);
+    await saveOpenedBooster(userData.uid, boosterType, drawnCards);
 
     // Quêtes et stats en arrière-plan : l'animation n'attend pas
     updateQuestsAfterBoosterOpen(drawBoosterType, drawnCards);
@@ -355,14 +355,13 @@ async function checkAndResetDailyCounter() {
     const today = getDayKey();
     const lastReset = userData.dailyLastReset ? getDayKey(new Date(userData.dailyLastReset.seconds * 1000)) : null;
     if (today !== lastReset) {
-        const userDocRef = doc(db, "users", userData.uid);
-        await updateDoc(userDocRef, {
-            dailyBoosterOpenedCount: 0,
-            dailyV2BoosterOpenedCount: 0,
-            dailyLastReset: Timestamp.now()
-        });
-        userData.dailyBoosterOpenedCount = 0;
-        userData.dailyV2BoosterOpenedCount = 0;
+        try {
+            await resetDailyCounters(userData.uid);
+            userData.dailyBoosterOpenedCount = 0;
+            userData.dailyV2BoosterOpenedCount = 0;
+        } catch (e) {
+            console.error("Remise à zéro des boosters du jour :", e);
+        }
     }
 }
 
@@ -382,64 +381,3 @@ async function initializePage() {
 
 // Lancement de l'initialisation de la page
 initializePage();
-async function updateUserAfterBoosterOpen(boosterType, drawnCards) {
-    const userDocRef = doc(db, "users", userData.uid);
-    try {
-        await runTransaction(db, async (transaction) => {
-            const userDoc = await transaction.get(userDocRef);
-            if (!userDoc.exists()) throw new Error("Utilisateur non trouvé.");
-            const currentData = userDoc.data();
-
-            const updates = {};
-
-            // Incrémente chaque carte obtenue. On compte les doublons : avant, deux fois la même
-            // carte dans un booster n'en ajoutait qu'une (la 2e écriture écrasait la 1re).
-            const counts = {};
-            for (const card of drawnCards) {
-                if (!card || !card.id) {
-                    console.error("Carte tirée invalide ou introuvable :", card);
-                    continue;
-                }
-                counts[card.id] = (counts[card.id] || 0) + 1;
-            }
-            for (const [cardId, n] of Object.entries(counts)) {
-                updates[`collection.${cardId}.quantity`] = increment(n);
-            }
-
-            // Boosters gratuits : seulement si leur série est encore en cours
-            if ((boosterType === 'daily' && !mainDailyBoosterType()) || (boosterType === 'daily_v2' && !isBoosterProduced('v2'))) {
-                throw new Error("Cette série est terminée : plus de booster gratuit.");
-            }
-            if (boosterType === 'daily') {
-                // Vérification côté transaction : empêche de dépasser la limite (autre onglet, double clic...)
-                if ((currentData.dailyBoosterOpenedCount || 0) >= DAILY_BOOSTER_LIMIT) throw new Error("Boosters quotidiens épuisés. Revenez demain !");
-                updates.dailyBoosterOpenedCount = increment(1);
-            } else if (boosterType === 'daily_v2') {
-                if ((currentData.dailyV2BoosterOpenedCount || 0) >= DAILY_V2_BOOSTER_LIMIT) throw new Error("Boosters V2 du jour épuisés. Revenez demain !");
-                updates.dailyV2BoosterOpenedCount = increment(1);
-            } else if (boosterType === 'classic') {
-                if ((currentData.boosterInventory?.classic || 0) < 1) throw new Error("Pas de booster classique à ouvrir.");
-                updates['boosterInventory.classic'] = increment(-1);
-            } else if (boosterType === 'legendary') {
-                if ((currentData.boosterInventory?.legendary || 0) < 1) throw new Error("Pas de booster légendaire à ouvrir.");
-                updates['boosterInventory.legendary'] = increment(-1);
-            } else if (boosterType === 'v3') {
-                if (!V3_RELEASED) throw new Error("La collection V3 n'est pas encore sortie.");
-                if ((currentData.boosterInventory?.v3 || 0) < 1) throw new Error("Pas de booster V3 à ouvrir.");
-                updates['boosterInventory.v3'] = increment(-1);
-            } else if (boosterType === 'v3_legendary') {
-                if ((currentData.boosterInventory?.v3_legendary || 0) < 1) throw new Error("Pas de booster légendaire V3 à ouvrir.");
-                updates['boosterInventory.v3_legendary'] = increment(-1);
-            } else if (boosterType === 'v2') {
-                if ((currentData.boosterInventory?.v2 || 0) < 1) throw new Error("Pas de booster V2 à ouvrir.");
-                updates['boosterInventory.v2'] = increment(-1);
-            }
-
-            transaction.update(userDocRef, updates);
-        });
-        // Les quêtes (Q12, Q13, Q15, quêtes du jour) sont mises à jour par updateQuestsAfterBoosterOpen
-    } catch (error) {
-        console.error("Erreur - mise à jour après ouverture booster:", error);
-        throw error;
-    }
-}

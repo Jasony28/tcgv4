@@ -4,8 +4,11 @@ import {
     runTransaction, increment, arrayUnion, arrayRemove, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
+import { dealStamp } from './econ-service.js';
 
 export const BOOSTER_TYPES = ['classic', 'v2', 'v3', 'legendary', 'v3_legendary'];
+// Cartes différentes par offre : 6 au plus (les règles Firestore vérifient chaque carte, avec une limite de calcul)
+export const MAX_TRADE_CARDS = 6;
 export const EMPTY_OFFER = () => ({ cards: {}, coins: 0, boosters: { classic: 0, v2: 0, v3: 0, legendary: 0, v3_legendary: 0 } });
 
 // ---------------- AMIS ----------------
@@ -149,6 +152,7 @@ export function normalizeOffer(offer) {
 /** Vérifie qu'un joueur possède ce qu'il propose. Pour les cartes, il doit en garder une. Renvoie un message ou null. */
 export function checkOfferAffordable(userData, offer, label = 'Tu') {
     const o = normalizeOffer(offer);
+    if (Object.keys(o.cards).length > MAX_TRADE_CARDS) return `Maximum ${MAX_TRADE_CARDS} cartes différentes par échange.`;
     for (const [id, q] of Object.entries(o.cards)) {
         if ((userData.collection?.[id]?.quantity || 0) - 1 < q) return `${label} n'a plus assez de doubles pour une carte.`;
     }
@@ -204,7 +208,7 @@ export async function validateTrade(tradeId) {
             updatesB[field] = increment(-d);
         }
         // lastDeal : les règles Firestore vérifient que l'échange passe à « completed » dans la même transaction
-        const lastDeal = { kind: 'trade', id: tradeId };
+        const lastDeal = dealStamp('trade', tradeId);
         updatesA['stats.friendTrades'] = increment(1);
         updatesB['stats.friendTrades'] = increment(1);
         if (Object.keys(updatesA).length) transaction.update(userARef, { ...updatesA, lastDeal });

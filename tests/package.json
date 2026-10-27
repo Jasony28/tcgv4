@@ -1,0 +1,14 @@
+{
+  "name": "tcg-rules-tests",
+  "private": true,
+  "description": "Tests des règles Firestore (anti-triche) dans l'émulateur Firebase",
+  "type": "module",
+  "scripts": {
+    "test": "cd .. && firebase emulators:exec --only firestore --project demo-tcg \"node --import ./tests/register.mjs --test --test-concurrency=1 tests/rules.test.mjs\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "firebase": "^12.0.0",
+    "firebase-tools": "^15.0.0"
+  }
+}

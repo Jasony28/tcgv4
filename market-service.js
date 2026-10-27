@@ -8,6 +8,7 @@ import {
     collection, query, where, getDocs, doc, runTransaction, increment, Timestamp
 } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
+import { econWrite, dealStamp } from './econ-service.js';
 import { allCards } from './cards.js';
 import { allCardsV2 } from './cards1.js';
 import { allCardsV3Released, V3_RELEASED } from './cards-v3.js';
@@ -51,7 +52,8 @@ export function getListingItem(listing) {
 export const getListingType = (listing) => listing.type || 'auction';
 
 /** Nom / image / rareté affichables pour un objet. */
-export const MAX_BUNDLE_CARDS = 10;
+// 6 cartes différentes au plus : au-delà, les règles Firestore ne peuvent plus tout vérifier (limite de calcul)
+export const MAX_BUNDLE_CARDS = 6;
 const RARITY_RANK = { 'Commune': 0, 'Rare': 1, 'epique': 2, 'Légendaire': 3 };
 
 /** Cartes d'un lot, triées de la plus rare à la moins rare : [{ cardId, quantity, card }] */
@@ -230,7 +232,7 @@ export async function createListing(seller, { mode, item, startPrice, buyNowPric
         if (cleanItem.type === 'booster' && owned < quantity) throw new Error("Tu n'as pas assez de boosters.");
         if (cleanItem.type === 'display' && owned < quantity) throw new Error("Tu n'as pas assez de displays.");
 
-        transaction.update(userRef, incs(itemDeltas(cleanItem, -1)));
+        econWrite(transaction, userRef, snap.data(), itemDeltas(cleanItem, -1));
         transaction.set(listingRef, {
             type: mode,
             item: cleanItem,
@@ -256,10 +258,10 @@ export async function createListing(seller, { mode, item, startPrice, buyNowPric
 }
 
 /**
- * Marque une écriture sur le compte d'un autre joueur : les règles Firestore vérifient que
- * l'annonce change dans la même transaction et que les deux joueurs y participent.
+ * Marque chaque écriture d'une affaire (sur mon compte comme sur celui de l'autre joueur) : les règles Firestore
+ * vérifient que l'annonce change dans la même transaction et que chacun reçoit ou paie exactement ce qu'il doit.
  */
-const auctionDeal = (id) => ({ kind: 'auction', id });
+const auctionDeal = (id) => dealStamp('auction', id);
 
 /** « Meilleure vente / meilleur achat » : seulement si le prix bat le record */
 const bestStat = (userData, key, entry) => entry.price > (userData?.stats?.[key]?.price || 0) ? { [`stats.${key}`]: entry } : {};
@@ -296,7 +298,7 @@ export async function placeBid(bidder, listingId, bidAmount) {
             transaction.update(doc(db, "users", listing.highestBidderId), { coins: increment(listing.currentPrice), lastDeal: auctionDeal(listingId) });
         }
         const pseudo = userDoc.data().pseudo || "???";
-        transaction.update(userRef, { coins: increment(-cost) });
+        transaction.update(userRef, { coins: increment(-cost), lastDeal: auctionDeal(listingId) });
         transaction.update(listingRef, { currentPrice: amount, highestBidderId: bidder.uid, highestBidderPseudo: pseudo });
         transaction.set(bidRef, { amount, bidderId: bidder.uid, bidderPseudo: pseudo, timestamp: Timestamp.now() });
     });
@@ -337,7 +339,7 @@ export async function buyNow(buyer, listingId) {
         const entry = { cardId: item.cardId || null, name: describeItem(item).name, price };
         const deal = auctionDeal(listingId);
         const now = Timestamp.now();
-        transaction.update(buyerRef, { coins: increment(-(price - already)), ...incs(itemDeltas(item)), ...bestStat(buyerDoc.data(), 'bestPurchase', entry) });
+        transaction.update(buyerRef, { coins: increment(-(price - already)), ...incs(itemDeltas(item)), lastDeal: deal, ...bestStat(buyerDoc.data(), 'bestPurchase', entry) });
         if (previousRef) transaction.update(previousRef, { coins: increment(listing.currentPrice), lastDeal: deal });
         if (sellerDoc.exists()) transaction.update(sellerRef, { coins: increment(sellerProceeds(price)), lastDeal: deal,
             'stats.cardsSoldMarket': increment(1), ...bestStat(sellerDoc.data(), 'bestSale', entry) });
@@ -390,7 +392,7 @@ export async function acceptTradeListing(buyer, listingId, offeredCardId = null)
         const buyerTotals = {};
         for (const id of giving) addTo(buyerTotals, `collection.${id}.quantity`, -1);
         for (const [f, n] of Object.entries(itemDeltas(item))) addTo(buyerTotals, f, n);
-        transaction.update(buyerRef, toIncrements(buyerTotals));
+        transaction.update(buyerRef, { ...toIncrements(buyerTotals), lastDeal: auctionDeal(listingId) });
         transaction.update(sellerRef, { ...Object.fromEntries(giving.map(id => [`collection.${id}.quantity`, increment(1)])), lastDeal: auctionDeal(listingId) });
         transaction.update(listingRef, {
             status: 'completed',
@@ -421,7 +423,7 @@ export async function cancelListing(seller, listingId) {
         if (listing.highestBidderId) {
             transaction.update(doc(db, "users", listing.highestBidderId), { coins: increment(listing.currentPrice), lastDeal: auctionDeal(listingId) });
         }
-        transaction.update(doc(db, "users", listing.sellerId), incs(itemDeltas(item)));
+        transaction.update(doc(db, "users", listing.sellerId), { ...incs(itemDeltas(item)), lastDeal: auctionDeal(listingId) });
         transaction.update(listingRef, { status: 'cancelled', cancelledAt: Timestamp.now() });
     });
 }
@@ -491,9 +493,9 @@ export async function sellToConsole(uid, cardId, quantity, pricePerCard) {
         if (!userDoc.exists()) throw new Error("Utilisateur non trouvé.");
         const currentQuantity = userDoc.data().collection?.[cardId]?.quantity || 0;
         if (quantity < 1 || currentQuantity < quantity) throw new Error("Pas assez de cartes à vendre.");
-        transaction.update(userRef, {
-            [`collection.${cardId}.quantity`]: increment(-quantity),
-            coins: increment(pricePerCard * quantity)
+        econWrite(transaction, userRef, userDoc.data(), {
+            [`collection.${cardId}.quantity`]: -quantity,
+            coins: pricePerCard * quantity
         });
     });
 }

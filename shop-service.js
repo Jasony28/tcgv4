@@ -1,6 +1,6 @@
 // Fichier: shop-service.js — logique de la boutique (sans interface, testable)
 // Cartes du jour, boosters (avec l'offre du jour), displays, packs spéciaux, calendrier de cadeaux.
-import { doc, runTransaction, increment } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+import { doc, runTransaction } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
 import { getDayKey, getWeekKey, previousDayKey, isWeekend } from './daily-utils.js';
 import {
@@ -8,6 +8,7 @@ import {
     boosterPriceToday, rollMysteryPack, MYSTERY_TABLE
 } from './shop-config.js';
 import { isBoosterProduced, convertEndedBoosters } from './series-config.js';
+import { econWrite } from './econ-service.js';
 
 const ENDED = "Cette série est terminée : plus aucun booster n'est produit.";
 
@@ -54,6 +55,7 @@ export function packAvailability(data, packId, now = new Date()) {
 }
 
 // Transaction commune : relit le joueur et son état boutique, applique la modification
+// mutate renvoie { deltas: mouvements de l'économie, extra: autres champs, result }
 async function shopTransaction(uid, mutate) {
     const userRef = doc(db, "users", uid);
     let result;
@@ -64,22 +66,20 @@ async function shopTransaction(uid, mutate) {
         const state = getShopState(data, getDayKey());
         const out = mutate(data, state) || {};
         result = out.result;
-        const updates = out.updates || {};
-        updates.shop = state;
-        transaction.update(userRef, updates);
+        econWrite(transaction, userRef, data, out.deltas || {}, { ...(out.extra || {}), shop: state });
     });
     return result;
 }
 
 const pay = (data, price) => {
     if ((data.coins || 0) < price) throw new Error("Pas assez de pièces !");
-    return { coins: increment(-price) };
+    return { coins: -price };
 };
-const addBoosters = (updates, boosters) => {
+const addBoosters = (deltas, boosters) => {
     for (const [type, n] of Object.entries(boosters || {})) {
-        if (n > 0) updates[`boosterInventory.${type}`] = increment(n);
+        if (n > 0) deltas[`boosterInventory.${type}`] = (deltas[`boosterInventory.${type}`] || 0) + n;
     }
-    return updates;
+    return deltas;
 };
 
 export function buyCard(uid, offer) {
@@ -88,7 +88,7 @@ export function buyCard(uid, offer) {
         if (!getDailyShop(getDayKey()).some(o => o.card.id === card.id)) throw new Error("La boutique vient de changer !");
         if (state.bought[card.id]) throw new Error("Tu as déjà acheté cette carte aujourd'hui.");
         state.bought[card.id] = true;
-        return { updates: { ...pay(data, price), [`collection.${card.id}.quantity`]: increment(1) } };
+        return { deltas: { ...pay(data, price), [`collection.${card.id}.quantity`]: 1 } };
     });
 }
 
@@ -100,7 +100,7 @@ export function buyBooster(uid, type) {
         if (state.boosters[type] >= def.dailyLimit) throw new Error("Limite du jour atteinte pour ce booster.");
         const price = boosterPriceToday(type, getDayKey());
         state.boosters[type]++;
-        return { updates: addBoosters(pay(data, price), { [type]: 1 }), result: { price } };
+        return { deltas: addBoosters(pay(data, price), { [type]: 1 }), result: { price } };
     });
 }
 
@@ -111,7 +111,7 @@ export function buyDisplay(uid, type) {
         if (!isBoosterProduced(def.boosterType, getDayKey())) throw new Error(ENDED);
         if (state.displays[type] >= def.dailyLimit) throw new Error("Une seule par jour : reviens demain !");
         state.displays[type]++;
-        return { updates: { ...pay(data, def.price), [`displayInventory.${type}`]: increment(1) } };
+        return { deltas: { ...pay(data, def.price), [`displayInventory.${type}`]: 1 } };
     });
 }
 
@@ -124,12 +124,13 @@ export function buyPack(uid, packId, rand = Math.random) {
         const check = packAvailability(data, packId);
         if (!check.available) throw new Error(`${pack?.name || 'Pack'} : ${check.reason.toLowerCase()}.`);
         const contents = mystery ? mystery.contents : pack.contents;
-        const updates = addBoosters(pay(data, pack.price), contents);
-        if (pack.coins) updates.coins = increment(pack.coins - pack.price);
+        const deltas = addBoosters(pay(data, pack.price), contents);
+        if (pack.coins) deltas.coins = pack.coins - pack.price;
+        const extra = {};
         if (pack.limit === 'daily') state.packs[packId]++;
-        if (pack.limit === 'once') updates[`packsBought.${packId}`] = true;
-        if (pack.limit === 'weekend') updates[`packsBought.${packId}`] = getWeekKey();
-        return { updates, result: { contents, coins: pack.coins || 0, label: mystery?.label } };
+        if (pack.limit === 'once') extra[`packsBought.${packId}`] = true;
+        if (pack.limit === 'weekend') extra[`packsBought.${packId}`] = getWeekKey();
+        return { deltas, extra, result: { contents, coins: pack.coins || 0, label: mystery?.label } };
     });
 }
 
@@ -141,8 +142,7 @@ export function claimGift(uid) {
         if (status.claimedToday) throw new Error("Cadeau déjà récupéré aujourd'hui.");
         // Booster d'une série terminée : remplacé par sa valeur en pièces
         const { boosters, coins } = convertEndedBoosters(status.reward.boosters, today);
-        const updates = addBoosters({ coins: increment(status.reward.coins + coins) }, boosters);
-        updates.giftCalendar = { lastDay: today, day: status.day };
-        return { updates, result: { ...status, reward: { coins: status.reward.coins + coins, boosters } } };
+        const deltas = addBoosters({ coins: status.reward.coins + coins }, boosters);
+        return { deltas, extra: { giftCalendar: { lastDay: today, day: status.day } }, result: { ...status, reward: { coins: status.reward.coins + coins, boosters } } };
     });
 }

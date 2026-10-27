@@ -11,7 +11,7 @@ import { getAchievementsStatus, rewardText, countClaimedAchievements } from './a
 import { claimAchievement } from './achievements.js';
 import {
   sendFriendRequest, acceptFriendRequest, refuseFriendRequest, removeFriend, friendCode, getFriendSuggestions,
-  createTradeRequest, validateTrade, normalizeOffer, checkOfferAffordable
+  createTradeRequest, validateTrade, normalizeOffer, checkOfferAffordable, MAX_TRADE_CARDS
 } from './trade-service.js';
 import { getLevel } from './battlepass-config.js';
 import { cardLabel } from './market-service.js';
@@ -666,6 +666,10 @@ function renderYourOffer() {
 }
 
 function updateCardOffer(cardId, delta) {
+  if (delta > 0 && !localOffer[cardId] && Object.keys(localOffer).length >= MAX_TRADE_CARDS) {
+    showToast('error', `Maximum ${MAX_TRADE_CARDS} cartes différentes par échange.`);
+    return;
+  }
   const maxQty = (globalUserData.collection?.[cardId]?.quantity || 0) - 1;
   localOffer[cardId] = Math.min(Math.max(0, (localOffer[cardId] || 0) + delta), maxQty);
   if (localOffer[cardId] === 0) delete localOffer[cardId];

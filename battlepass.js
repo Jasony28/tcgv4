@@ -1,4 +1,4 @@
-import { doc, getDoc, runTransaction, increment } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+import { doc, getDoc } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
 import { play } from './sfx.js';
 import { protectPage } from './auth-manager.js';
@@ -7,14 +7,13 @@ import {
     XP_PER_LEVEL, MAX_LEVEL, REWARD_ICONS
 } from './battlepass-config.js';
 import { showToast } from './toast.js';
-import { computeMaxStreak, normalizeBattlePass } from './quest-manager.js';
+import { computeMaxStreak, normalizeBattlePass, claimPassRewards } from './quest-manager.js';
 import { getDayKey, getWeekKey, msUntilNextDay, msUntilNextWeek, formatDuration } from './daily-utils.js';
 import { allCards } from './cards.js';
 import { allCardsV2 } from './cards1.js';
 import { allCardsV3Released } from './cards-v3.js';
-import { isBoosterProduced, isCardProduced, BOOSTER_COIN_VALUE } from './series-config.js';
+import { isCardProduced } from './series-config.js';
 
-const BOOSTER_REWARDS = { classic_booster: 'classic', legendary_booster: 'legendary', v2_booster: 'v2', v3_booster: 'v3', v3_legendary_booster: 'v3_legendary' };
 const CARD_POOL = [...allCards, ...allCardsV2, ...allCardsV3Released];
 
 const trackContainer = document.querySelector('.pass-track');
@@ -165,34 +164,8 @@ async function claimRewards(rewards) {
         }
     }
 
-    const userRef = doc(db, "users", userData.uid);
     try {
-        await runTransaction(db, async (transaction) => {
-            const userDoc = await transaction.get(userRef);
-            if (!userDoc.exists()) throw new Error("Utilisateur non trouvé.");
-            const pass = userDoc.data().battlePass || {};
-            if (pass.seasonId !== getWeekKey()) throw new Error("Nouvelle saison ! Recharge la page.");
-            const level = getLevel(pass.xp);
-
-            const updates = {};
-            const totals = {}; // cumul par champ (ex: 2 récompenses pièces => une seule écriture)
-            const add = (field, n) => { totals[field] = (totals[field] || 0) + n; };
-            for (const reward of rewards) {
-                if (reward.step > level) throw new Error(`Niveau ${reward.step} pas encore atteint.`);
-                if (pass.claimedRewards?.[reward.step]) throw new Error(`Récompense ${reward.step} déjà réclamée.`);
-                if (reward.type === 'coins') add('coins', reward.value);
-                else if (BOOSTER_REWARDS[reward.type]) {
-                    // Booster d'une série terminée : remplacé par sa valeur en pièces
-                    const type = BOOSTER_REWARDS[reward.type];
-                    if (isBoosterProduced(type)) add(`boosterInventory.${type}`, reward.value);
-                    else add('coins', reward.value * BOOSTER_COIN_VALUE[type]);
-                }
-                else if (reward.type === 'random_card') add(`collection.${drawnCards[reward.step].id}.quantity`, 1);
-                updates[`battlePass.claimedRewards.${reward.step}`] = true;
-            }
-            for (const [field, n] of Object.entries(totals)) updates[field] = increment(n);
-            transaction.update(userRef, updates);
-        });
+        await claimPassRewards(userData.uid, rewards, drawnCards);
 
         // Affichage mis à jour tout de suite (sans attendre le rechargement du compte)
         for (const r of rewards) bp.claimedRewards[r.step] = true;
