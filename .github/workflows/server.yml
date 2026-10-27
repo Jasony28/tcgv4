@@ -1,0 +1,83 @@
+# Serveur du jeu (dossier server/) sur Cloudflare Workers — gratuit, sans carte bancaire.
+# C'est lui qui calcule toute l'économie : tirages des boosters, prix, récompenses, marché, échanges.
+#
+# Prérequis (une seule fois), dans GitHub → Settings → Secrets and variables → Actions :
+#   CLOUDFLARE_API_TOKEN   : Cloudflare → My Profile → API Tokens → Create Token → modèle « Edit Cloudflare Workers »
+#   CLOUDFLARE_ACCOUNT_ID  : Cloudflare → Workers & Pages → « Account ID » (colonne de droite)
+#   FIREBASE_SERVICE_ACCOUNT : déjà présent (clé JSON du compte de service, utilisée aussi par la clôture des enchères)
+#
+# Déploiement : à chaque modification du serveur ou de la logique du jeu sur main, ou avec « Run workflow ».
+# L'adresse du serveur s'affiche à la fin du déploiement : la recopier dans server-config.js.
+name: Serveur du jeu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - '*-service.js'
+      - '*-config.js'
+      - 'quest-manager.js'
+      - 'achievements.js'
+      - 'stats-manager.js'
+      - 'booster-draws.js'
+      - 'daily-utils.js'
+      - 'player-level.js'
+      - 'cards*.js'
+      - '.github/workflows/server.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: server-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Installer et assembler le serveur
+        working-directory: server
+        run: |
+          npm ci
+          node build.mjs
+      - name: Vérifier les secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          missing=""
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          [ -n "$FIREBASE_SERVICE_ACCOUNT" ] || missing="$missing FIREBASE_SERVICE_ACCOUNT"
+          if [ -n "$missing" ]; then echo "::error::Secrets manquants :$missing (voir le haut de ce fichier)"; exit 1; fi
+      - name: Déployer sur Cloudflare
+        working-directory: server
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy 2>&1 | tee deploy.log
+      - name: Donner la clé Firebase au serveur
+        working-directory: server
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: printf '%s' "$FIREBASE_SERVICE_ACCOUNT" | npx wrangler secret put FIREBASE_SERVICE_ACCOUNT
+      - name: Adresse du serveur (à mettre dans server-config.js)
+        working-directory: server
+        run: |
+          url=$(grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' deploy.log | head -1)
+          echo "Adresse du serveur : $url"
+          echo "### Adresse du serveur : $url" >> "$GITHUB_STEP_SUMMARY"
+          [ -z "$url" ] || curl -sS "$url/" || true

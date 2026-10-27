@@ -2,7 +2,7 @@
 import { onAuthStateChanged, signOut, getAuth } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
 import { doc, getDoc, onSnapshot, updateDoc, serverTimestamp, collection, query, where, arrayRemove } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
-import { updateQuestProgress } from './quest-manager.js';
+import { callServer } from './api.js';
 import { getAchievementsStatus } from './achievements-config.js';
 import { showToast } from './toast.js';
 import { playerLevel } from './player-level.js';
@@ -144,7 +144,7 @@ export function protectPage() {
                 if (userDoc.exists()) {
                     // Présence (affichée dans la liste d'amis) + quête "connecte-toi X jours"
                     updateDoc(userDocRef, { lastOnline: serverTimestamp() }).catch(console.error);
-                    await updateQuestProgress('daily_login_streak');
+                    await callServer('login').catch((e) => console.error('Connexion du jour :', e));
                     const freshDoc = await getDoc(userDocRef);
                     const userData = { uid: user.uid, ...freshDoc.data() };
                     // On ne lance la mise à jour et l'écouteur QUE depuis cet endroit

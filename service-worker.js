@@ -57,8 +57,9 @@ const urlsToCache = [
     './battlepass-config.js',
     './quest-manager.js',
     './stats-manager.js',
-    './econ-config.js',
     './econ-service.js',
+    './api.js',
+    './server-config.js',
     './toast.js',
     './assets/card-back/dos.webp',
     './assets/logo/logo.webp'

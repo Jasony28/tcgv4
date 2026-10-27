@@ -6,12 +6,11 @@ import { allCards as allCardsV1 } from './cards.js';
 import { allCardsV2 } from './cards1.js';
 import { db } from './firebase-config.js';
 import { showToast, showConfirmDialog } from './toast.js';
-import { updateQuestProgress } from './quest-manager.js';
+import { callServer } from './api.js';
 import { getAchievementsStatus, rewardText, countClaimedAchievements } from './achievements-config.js';
-import { claimAchievement } from './achievements.js';
 import {
   sendFriendRequest, acceptFriendRequest, refuseFriendRequest, removeFriend, friendCode, getFriendSuggestions,
-  createTradeRequest, validateTrade, normalizeOffer, checkOfferAffordable, MAX_TRADE_CARDS
+  createTradeRequest, normalizeOffer, checkOfferAffordable, MAX_TRADE_CARDS
 } from './trade-service.js';
 import { getLevel } from './battlepass-config.js';
 import { cardLabel } from './market-service.js';
@@ -166,7 +165,8 @@ function renderAchievements(userData) {
       btn.addEventListener('click', async () => {
         btn.disabled = true;
         try {
-          const claimed = await claimAchievement(globalUserData.uid, a.id);
+          await callServer('claimAchievement', { id: a.id });
+          const claimed = a;
           showToast('success', `🏅 ${claimed.title} ! ${rewardText(claimed.reward)}`, 4500);
         } catch (e) {
           showToast('error', e.message || "Impossible de réclamer ce succès.");
@@ -735,7 +735,7 @@ async function handleFinalValidation() {
   const btn = document.getElementById('trade-final-confirm-btn');
   if (btn) btn.disabled = true;
   try {
-    await validateTrade(currentTradeId);
+    await callServer('validateTrade', { tradeId: currentTradeId });
     await onTradeCompleted();
   } catch (e) {
     // Si l'ami a validé en même temps, l'échange est déjà fait : l'écouteur fermera la fenêtre
@@ -749,7 +749,6 @@ async function onTradeCompleted() {
   if (!currentTradeId) return;
   closeTradeModal();
   showToast('success', "🔄 Échange effectué !");
-  await updateQuestProgress('friend_trade');
 }
 function handleCancelTrade() {
   if (!currentTradeId) return;

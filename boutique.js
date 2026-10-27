@@ -4,17 +4,13 @@ import { db } from './firebase-config.js';
 import { play } from './sfx.js';
 import { protectPage } from './auth-manager.js';
 import { showToast, showConfirmDialog } from './toast.js';
-import { updateQuestProgress } from './quest-manager.js';
-import { updateUserStats } from './stats-manager.js';
+import { callServer } from './api.js';
 import { getDayKey, msUntilNextDay, formatDuration } from './daily-utils.js';
 import {
     getDailyShop, SHOP_RARITY_ODDS, SHOP_BOOSTERS, SHOP_DISPLAYS, SHOP_PACKS, GIFT_CALENDAR, MYSTERY_TABLE,
     RARITY_LABELS, getDailyDeal, boosterPriceToday, displaySaving, describeBoosters
 } from './shop-config.js';
-import {
-    getShopState, getGiftStatus, packAvailability,
-    buyCard, buyBooster, buyDisplay, buyPack, claimGift
-} from './shop-service.js';
+import { getShopState, getGiftStatus, packAvailability } from './shop-service.js';
 import { isBoosterProduced, seriesAnnouncements } from './series-config.js';
 
 const $ = (id) => document.getElementById(id);
@@ -223,7 +219,6 @@ async function purchase({ title, message, action, success }) {
         const result = await action();
         showToast('success', success(result), 4500);
         play('coins');
-        await updateQuestProgress('shop_buy');
         return result;
     } catch (e) {
         showToast('error', e.message || "Achat impossible.");
@@ -238,11 +233,7 @@ function onBuyCard(offer) {
     purchase({
         title: 'Acheter cette carte ?',
         message: `${card.name} (${RARITY_LABELS[card.rarity]}) pour ${price} pièces.`,
-        action: async () => {
-            await buyCard(userData.uid, offer);
-            await updateUserStats(userData.uid, { bestPurchase: { cardId: card.id, price } });
-            await updateQuestProgress('obtain_10_diff_cards_24h', 1, { cardId: card.id });
-        },
+        action: () => callServer('buyCard', { cardId: card.id }),
         success: () => `${card.name} ajoutée à ta collection !`
     });
 }
@@ -253,7 +244,7 @@ function onBuyBooster(type) {
     purchase({
         title: 'Acheter un booster ?',
         message: `${def.name} pour ${price} pièces. Il ira dans ton inventaire (page Booster).`,
-        action: () => buyBooster(userData.uid, type),
+        action: () => callServer('buyBooster', { type }),
         success: () => `${def.name} ajouté à ton inventaire !`
     });
 }
@@ -263,7 +254,7 @@ function onBuyDisplay(type) {
     purchase({
         title: `Acheter la ${d.name} ?`,
         message: `${d.boosters + d.bonus} boosters (dont ${d.bonus} offerts) pour ${d.price} pièces. Ouvre-la quand tu veux depuis ton inventaire.`,
-        action: () => buyDisplay(userData.uid, type),
+        action: () => callServer('buyDisplay', { type }),
         success: () => `${d.name} rangée dans ton inventaire (page Booster) !`
     });
 }
@@ -273,7 +264,7 @@ function onBuyPack(id) {
     purchase({
         title: `Acheter le ${pack.name} ?`,
         message: `${pack.description} pour ${pack.price} pièces.`,
-        action: () => buyPack(userData.uid, id),
+        action: () => callServer('buyPack', { packId: id }),
         success: (r) => `${r.label ? (r.label === 'JACKPOT' ? '💥 JACKPOT ! ' : `${r.label} ! `) : ''}Tu reçois : ${describeBoosters(r.contents)}${r.coins ? ` + ${r.coins} pièces` : ''}. Tout est dans ton inventaire !`
     });
 }
@@ -283,7 +274,7 @@ async function onClaimGift() {
     busy = true;
     $('gift-button').disabled = true;
     try {
-        const status = await claimGift(userData.uid);
+        const status = await callServer('claimGift');
         const boosters = describeBoosters(status.reward.boosters);
         const extra = boosters ? ` + ${boosters}` : '';
         showToast('success', `Jour ${status.day} : +${status.reward.coins} pièces${extra} ! Reviens demain.`);

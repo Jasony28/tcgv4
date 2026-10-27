@@ -3,6 +3,7 @@
 import { protectPage } from './auth-manager.js';
 import { showConfirmDialog } from './toast.js';
 import { sellCardToConsole } from './marche.js';
+import { CONSOLE_SELL_PRICES } from './market-service.js';
 
 // --- Éléments du DOM ---
 const collectionGrid = document.getElementById('collection-grid');
@@ -154,8 +155,7 @@ async function handleConsoleSell(card, cardData) {
         modalErrorMessage.textContent = `La quantité doit être entre 1 et ${maxQuantity}.`;
         return;
     }
-    const consoleSellPrices = { "Commune": 1, "Rare": 2, "epique": 5, "Légendaire": 20 };
-    const pricePerCard = consoleSellPrices[card.rarity];
+    const pricePerCard = CONSOLE_SELL_PRICES[card.rarity];
     const ok = await showConfirmDialog({
         title: "Vente à la console",
         message: `Voulez-vous vraiment vendre ${quantityToSell} exemplaire(s) de '${card.name}' pour ${pricePerCard * quantityToSell} pièce(s) ?`,
@@ -169,7 +169,7 @@ async function handleConsoleSell(card, cardData) {
     confirmSellButton.disabled = true;
     try {
         // On passe la rareté : sinon les cartes V2 ne comptaient pas pour les quêtes de vente
-        await sellCardToConsole(card.id, quantityToSell, pricePerCard, card.rarity);
+        await sellCardToConsole(card.id, quantityToSell);
     } finally {
         confirmSellButton.disabled = false;
     }

@@ -7,8 +7,8 @@ import { db } from './firebase-config.js';
 import { dealStamp } from './econ-service.js';
 
 export const BOOSTER_TYPES = ['classic', 'v2', 'v3', 'legendary', 'v3_legendary'];
-// Cartes différentes par offre : 6 au plus (les règles Firestore vérifient chaque carte, avec une limite de calcul)
-export const MAX_TRADE_CARDS = 6;
+// Cartes différentes par offre
+export const MAX_TRADE_CARDS = 10;
 export const EMPTY_OFFER = () => ({ cards: {}, coins: 0, boosters: { classic: 0, v2: 0, v3: 0, legendary: 0, v3_legendary: 0 } });
 
 // ---------------- AMIS ----------------

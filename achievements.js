@@ -3,7 +3,6 @@ import { doc, runTransaction, Timestamp } from "https://www.gstatic.com/firebase
 import { db } from './firebase-config.js';
 import { ACHIEVEMENTS } from './achievements-config.js';
 import { convertEndedBoosters } from './series-config.js';
-import { achievementValue } from './econ-config.js';
 import { econWrite } from './econ-service.js';
 
 /**
@@ -29,9 +28,8 @@ export async function claimAchievement(uid, achievementId) {
         const { boosters, coins } = convertEndedBoosters({ classic: r.classic, v2: r.v2, v3: r.v3, legendary: r.legendary });
         const deltas = { coins: (r.coins || 0) + coins };
         for (const [type, n] of Object.entries(boosters)) deltas[`boosterInventory.${type}`] = n;
-        // La récompense ne compte pas dans le plafond du jour : les règles revérifient les cartes du succès
         econWrite(transaction, userRef, data, deltas,
-            { [`achievements.${achievementId}`]: { claimed: true, at: Timestamp.now() }, 'econ.claim': achievementId }, achievementValue(r));
+            { [`achievements.${achievementId}`]: { claimed: true, at: Timestamp.now() } });
     });
     return achievement;
 }

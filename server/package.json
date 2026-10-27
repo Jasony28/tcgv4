@@ -1,0 +1,14 @@
+{
+  "name": "tcg-serveur",
+  "private": true,
+  "description": "Serveur du TCG (Cloudflare Worker) : toute l'économie du jeu est calculée ici",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "deploy": "node build.mjs && wrangler deploy"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "wrangler": "^4.0.0"
+  }
+}

@@ -1,10 +1,11 @@
 import { doc, runTransaction } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
-import { questsConfig, dailyQuestPool, getDailyQuestIds, getLevel } from './battlepass-config.js';
-import { getAuth } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
+import { questsConfig, dailyQuestPool, getDailyQuestIds, getLevel, fullRewardsList } from './battlepass-config.js';
 import { getDayKey, getWeekKey } from './daily-utils.js';
-import { showToast } from './toast.js';
-import { isBoosterProduced, BOOSTER_COIN_VALUE } from './series-config.js';
+import { isBoosterProduced, isCardProduced, BOOSTER_COIN_VALUE } from './series-config.js';
+import { allCards } from './cards.js';
+import { allCardsV2 } from './cards1.js';
+import { allCardsV3Released } from './cards-v3.js';
 import { econWrite } from './econ-service.js';
 
 /**
@@ -92,26 +93,30 @@ function advanceWeeklyQuest(questId, questDef, bp, value, extra) {
   return completed;
 }
 
-export async function updateQuestProgress(actionType, value = 1, extra = {}) {
-  const auth = getAuth();
-  const user = auth.currentUser;
-  if (!user) {
-    console.warn("Utilisateur non connecté");
-    return;
-  }
-  const userRef = doc(db, "users", user.uid);
+/**
+ * Fait avancer les quêtes d'un type d'action (appelé par le serveur après chaque action du joueur).
+ * @returns {Promise<{completed: Array<{description, xp, coins}>, levelBefore: number, levelAfter: number}>}
+ */
+export function updateQuestProgress(uid, actionType, value = 1, extra = {}) {
+  return updateQuestsProgress(uid, [{ actionType, value, extra }]);
+}
+
+/** Plusieurs avancées de quêtes en une seule transaction : [{ actionType, value, extra }] */
+export async function updateQuestsProgress(uid, events) {
+  const userRef = doc(db, "users", uid);
   let completedQuests = [];
   let levelBefore = 0, levelAfter = 0;
 
-  try {
-    await runTransaction(db, async (transaction) => {
-      completedQuests = []; // la transaction peut être rejouée
-      const userDoc = await transaction.get(userRef);
-      if (!userDoc.exists()) throw "User document not found";
+  await runTransaction(db, async (transaction) => {
+    completedQuests = []; // la transaction peut être rejouée
+    const userDoc = await transaction.get(userRef);
+    if (!userDoc.exists()) throw new Error("Utilisateur non trouvé.");
 
-      const bp = normalizeBattlePass(userDoc.data().battlePass);
-      levelBefore = getLevel(bp.xp);
+    const bp = normalizeBattlePass(userDoc.data().battlePass);
+    levelBefore = getLevel(bp.xp);
 
+    for (const { actionType, value = 1, extra = {} } of events) {
+      if (!value) continue;
       // Quêtes de la semaine
       for (const questId in questsConfig) {
         const questDef = questsConfig[questId];
@@ -132,33 +137,41 @@ export async function updateQuestProgress(actionType, value = 1, extra = {}) {
         }
         bp.daily.progress[questId] = prog;
       }
-
-      bp.xp += completedQuests.reduce((sum, q) => sum + (q.xp || 0), 0);
-      levelAfter = getLevel(bp.xp);
-      // Les quêtes rapportent aussi des pièces
-      const coinsEarned = completedQuests.reduce((sum, q) => sum + (q.coins || 0), 0);
-      econWrite(transaction, userRef, userDoc.data(), { coins: coinsEarned }, { battlePass: bp });
-    });
-
-    for (const q of completedQuests) {
-      showToast('success', `Quête terminée : ${q.description} (+${q.xp} XP${q.coins ? `, +${q.coins} pièces` : ''})`, 4000);
     }
-    if (levelAfter > levelBefore) {
-      showToast('info', `Niveau ${levelAfter} atteint ! Récupère ta récompense dans le Pass.`, 4500);
-    }
-  } catch (e) {
-    console.error("La transaction de mise à jour de quête a échoué : ", e);
-  }
+
+    bp.xp += completedQuests.reduce((sum, q) => sum + (q.xp || 0), 0);
+    levelAfter = getLevel(bp.xp);
+    // Les quêtes rapportent aussi des pièces
+    const coinsEarned = completedQuests.reduce((sum, q) => sum + (q.coins || 0), 0);
+    econWrite(transaction, userRef, userDoc.data(), { coins: coinsEarned }, { battlePass: bp });
+  });
+  return {
+    completed: completedQuests.map(q => ({ description: q.description, xp: q.xp || 0, coins: q.coins || 0 })),
+    levelBefore, levelAfter
+  };
 }
 
 // Types de récompenses du Pass → type de booster
 const BOOSTER_REWARDS = { classic_booster: 'classic', legendary_booster: 'legendary', v2_booster: 'v2', v3_booster: 'v3', v3_legendary_booster: 'v3_legendary' };
 
+const PASS_CARD_POOL = [...allCards, ...allCardsV2, ...allCardsV3Released];
+
 /**
- * Récupère des récompenses du Pass en une seule transaction.
- * @param {object} drawnCards - pour les récompenses « carte aléatoire » : { palier: carte } (tirées avant la transaction)
+ * Récupère des récompenses du Pass en une seule transaction (sur le serveur : les cartes aléatoires y sont tirées).
+ * @param {number[]} steps - les paliers à récupérer
+ * @returns {Promise<{rewards: object[], drawnCards: object}>} drawnCards = { palier: carte }
  */
-export async function claimPassRewards(uid, rewards, drawnCards = {}) {
+export async function claimPassRewards(uid, steps) {
+  const wanted = new Set((Array.isArray(steps) ? steps : []).map(Number));
+  const rewards = fullRewardsList.filter(r => wanted.has(r.step));
+  if (!rewards.length) throw new Error("Aucune récompense choisie.");
+  // Cartes aléatoires tirées avant la transaction (une transaction peut être rejouée) ; séries en cours seulement
+  const drawnCards = {};
+  for (const r of rewards) {
+    if (r.type !== 'random_card') continue;
+    const candidates = PASS_CARD_POOL.filter(c => c.rarity === r.rarity && isCardProduced(c) && (!r.version || c.version === r.version));
+    drawnCards[r.step] = candidates[Math.floor(Math.random() * candidates.length)];
+  }
   const userRef = doc(db, "users", uid);
   await runTransaction(db, async (transaction) => {
     const userDoc = await transaction.get(userRef);
@@ -185,4 +198,5 @@ export async function claimPassRewards(uid, rewards, drawnCards = {}) {
     }
     econWrite(transaction, userRef, userDoc.data(), deltas, extra);
   });
+  return { rewards, drawnCards };
 }

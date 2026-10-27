@@ -31,6 +31,8 @@ export const DISPLAY_INFO = {
     ...(V3_RELEASED ? { v3: { name: 'Display V3', minPrice: 150 } } : {}),
     legendary: { name: 'Coffret Légendaire', minPrice: 160 }
 };
+// Rachat d'une carte par la console (prix fixe, décidé par le serveur)
+export const CONSOLE_SELL_PRICES = { 'Commune': 1, 'Rare': 2, 'epique': 5, 'Légendaire': 20 };
 export const CARD_MIN_PRICES = { 'Commune': 5, 'Rare': 10, 'epique': 25, 'Légendaire': 100 };
 
 // Taxe de l'Hôtel des Ventes sur les enchères vendues : ces pièces sortent du jeu,
@@ -52,8 +54,7 @@ export function getListingItem(listing) {
 export const getListingType = (listing) => listing.type || 'auction';
 
 /** Nom / image / rareté affichables pour un objet. */
-// 6 cartes différentes au plus : au-delà, les règles Firestore ne peuvent plus tout vérifier (limite de calcul)
-export const MAX_BUNDLE_CARDS = 6;
+export const MAX_BUNDLE_CARDS = 10;
 const RARITY_RANK = { 'Commune': 0, 'Rare': 1, 'epique': 2, 'Légendaire': 3 };
 
 /** Cartes d'un lot, triées de la plus rare à la moins rare : [{ cardId, quantity, card }] */
@@ -434,7 +435,7 @@ export async function cancelListing(seller, listingId) {
  * est relue dans sa transaction et n'est traitée que si elle est encore active.
  * @returns {Promise<Array<{listing:object, outcome:'sold'|'returned'}>>}
  */
-export async function finalizeExpiredListings(myUid = null) {
+export async function finalizeExpiredListings(myUid = null, max = Infinity) {
     const q = query(collection(db, "auctions"), where("status", "==", "active"), where("endTime", "<=", Timestamp.now()));
     const snapshot = await getDocs(q);
     const results = [];
@@ -443,6 +444,7 @@ export async function finalizeExpiredListings(myUid = null) {
         // Les règles Firestore n'autorisent que les participants : les autres annonces sont closes par GitHub Actions
         const d = docSnap.data();
         if (myUid && d.sellerId !== myUid && d.highestBidderId !== myUid) continue;
+        if (results.length >= max) break;
         const listingRef = doc(db, "auctions", docSnap.id);
         let outcome = null;
         let listing = null;
@@ -485,8 +487,12 @@ export async function finalizeExpiredListings(myUid = null) {
     return results;
 }
 
-/** Vente directe à la console (prix fixe). */
-export async function sellToConsole(uid, cardId, quantity, pricePerCard) {
+/** Vente directe à la console, au prix fixe de la rareté (CONSOLE_SELL_PRICES). Renvoie les pièces gagnées. */
+export async function sellToConsole(uid, cardId, quantity) {
+    const card = findCard(cardId);
+    if (!card) throw new Error("Carte inconnue.");
+    const pricePerCard = CONSOLE_SELL_PRICES[card.rarity] || 1;
+    if (!Number.isInteger(quantity) || quantity < 1) throw new Error("Quantité invalide.");
     const userRef = doc(db, "users", uid);
     await runTransaction(db, async (transaction) => {
         const userDoc = await transaction.get(userRef);
@@ -497,5 +503,5 @@ export async function sellToConsole(uid, cardId, quantity, pricePerCard) {
             [`collection.${cardId}.quantity`]: -quantity,
             coins: pricePerCard * quantity
         });
-    });
+    });    return { coins: pricePerCard * quantity, rarity: card.rarity };
 }

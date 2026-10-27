@@ -1,7 +1,7 @@
 # Règles de sécurité Firestore (anti-triche) : testées à chaque modification, puis mises en ligne.
 #
-#  - À chaque push ou pull request qui touche les règles, l'économie ou les cartes : les tests tournent
-#    dans l'émulateur Firebase (le vrai code du jeu + des tentatives de triche).
+#  - À chaque push ou pull request : les tests tournent dans l'émulateur Firebase (le serveur du jeu
+#    assemblé comme pour Cloudflare + des tentatives de triche directement dans Firestore).
 #  - Sur main (ou avec le bouton « Run workflow ») : si les tests passent, firestore.rules est déployé
 #    sur le projet Firebase, avec le même secret FIREBASE_SERVICE_ACCOUNT que la clôture des enchères.
 #    Si le déploiement est refusé (droits du compte de service), copier firestore.rules dans
@@ -12,15 +12,8 @@ on:
   push:
     paths:
       - 'firestore.rules'
-      - 'econ-config.js'
-      - 'econ-service.js'
-      - 'cards*.js'
-      - 'achievements-config.js'
-      - 'booster-draws.js'
-      - '*-service.js'
-      - 'quest-manager.js'
-      - 'achievements.js'
-      - 'scripts/gen-rules-data.mjs'
+      - '*.js'
+      - 'server/**'
       - 'tests/**'
       - '.github/workflows/firestore-rules.yml'
   pull_request:
@@ -43,15 +36,16 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: tests/package-lock.json
+          cache-dependency-path: |
+            tests/package-lock.json
+            server/package-lock.json
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
-      - name: Les chiffres et cartes recopiés dans firestore.rules sont à jour
-        run: |
-          node scripts/gen-rules-data.mjs
-          git diff --exit-code firestore.rules || { echo "::error::Lance « node scripts/gen-rules-data.mjs » et commite firestore.rules"; exit 1; }
+      - name: Installer le serveur (pour l'assembler)
+        run: npm ci
+        working-directory: server
       - name: Installer les outils de test
         run: npm ci
         working-directory: tests
@@ -74,6 +68,11 @@ jobs:
       - name: Installer firebase-tools
         run: npm ci
         working-directory: tests
+      - name: Le serveur du jeu est configuré (sinon les nouvelles règles bloqueraient le jeu)
+        run: |
+          if grep -q 'REMPLACER' server-config.js; then
+            echo "::error::Déploie d'abord le serveur (Actions → « Serveur du jeu ») et recopie son adresse dans server-config.js"; exit 1
+          fi
       - name: Déployer firestore.rules
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}

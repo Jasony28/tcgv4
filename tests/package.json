@@ -4,7 +4,7 @@
   "description": "Tests des règles Firestore (anti-triche) dans l'émulateur Firebase",
   "type": "module",
   "scripts": {
-    "test": "cd .. && firebase emulators:exec --only firestore --project demo-tcg \"node --import ./tests/register.mjs --test --test-concurrency=1 tests/rules.test.mjs\""
+    "test": "cd ../server && node build.mjs && cd .. && firebase emulators:exec --only firestore --project demo-tcg \"node --test --test-concurrency=1 tests/rules.test.mjs tests/auth.test.mjs\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.0",

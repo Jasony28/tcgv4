@@ -1,17 +1,18 @@
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 import { db } from './firebase-config.js';
 import { protectPage } from './auth-manager.js';
+import { allCards } from './cards.js';
 import { allCardsV2 } from './cards1.js';
-import { allCardsV3Released, V3_RELEASED } from './cards-v3.js';
-import { updateQuestProgress } from './quest-manager.js';
-import { updateUserStats } from './stats-manager.js';
+import { allCardsV3, V3_RELEASED } from './cards-v3.js';
+import { callServer } from './api.js';
 import { showToast, showConfirmDialog } from './toast.js';
 import { getDayKey } from './daily-utils.js';
 import { playBoosterOpening } from './booster-animation.js';
 import { SHOP_DISPLAYS } from './shop-config.js';
-import { openDisplay, keepDailyBooster, saveOpenedBooster, resetDailyCounters } from './inventory-service.js';
 import { seriesOfBooster, seriesStatus, isBoosterProduced, daysUntilEnd, mainDailyBoosterType, seriesAnnouncements } from './series-config.js';
-import { DAILY_BOOSTER_LIMIT, DAILY_V2_BOOSTER_LIMIT, LEGENDARY_CHANCE, drawClassicBoosterCards, drawLegendaryBoosterCards } from './booster-draws.js';
+import { DAILY_BOOSTER_LIMIT, DAILY_V2_BOOSTER_LIMIT } from './booster-draws.js';
+
+const ALL_CARDS_BY_ID = new Map([...allCards, ...allCardsV2, ...allCardsV3].map(c => [c.id, c]));
 
 // --- Éléments du DOM ---
 const boosterStatusEl = document.getElementById('booster-status');
@@ -247,7 +248,7 @@ async function handleKeepDaily(kind) {
     if (transactionInProgress) return;
     transactionInProgress = true;
     try {
-        await keepDailyBooster(userData.uid, kind);
+        await callServer('keepDailyBooster', { kind });
         const label = kind === 'v2' ? 'V2' : MAIN_DAILY_LABEL[mainDailyBoosterType()];
         showToast('success', `📦 Booster ${label} rangé dans ton inventaire !`);
         await refreshUserData();
@@ -272,7 +273,7 @@ async function handleOpenDisplay(type) {
     if (!ok) return;
     transactionInProgress = true;
     try {
-        const res = await openDisplay(userData.uid, type);
+        const res = await callServer('openDisplay', { type });
         showToast('success', `🗃️ ${d.name} ouverte : +${res.count} boosters dans ton inventaire !`);
         await refreshUserData();
     } catch (e) {
@@ -292,21 +293,10 @@ async function refreshUserData() {
 async function openBooster(boosterType) {
     if (!userData) return;
 
-    let drawnCards;
-    // Boosters gratuits du jour : V1 (contenu classique) et V2 (contenu V2), chacun son compteur
-    const drawBoosterType = { daily: mainDailyBoosterType(), daily_v2: 'v2' }[boosterType] || boosterType;
-
-    if (drawBoosterType === 'legendary') {
-        drawnCards = drawLegendaryBoosterCards();
-    } else if (drawBoosterType === 'v3_legendary') {
-        drawnCards = drawLegendaryBoosterCards(allCardsV3Released);
-    } else if (drawBoosterType === 'v3') {
-        drawnCards = drawClassicBoosterCards(allCardsV3Released, LEGENDARY_CHANCE.v3);
-    } else if (drawBoosterType === 'v2') {
-        drawnCards = drawClassicBoosterCards(allCardsV2, LEGENDARY_CHANCE.v2);
-    } else {
-        drawnCards = drawClassicBoosterCards();
-    }
+    // Le serveur tire les cartes et les ajoute à la collection (le jeu ne peut pas choisir ses cartes).
+    // Si l'enregistrement échoue, l'erreur remonte à handleOpenBooster : rien n'est affiché.
+    const { cards } = await callServer('openBooster', { boosterType });
+    const drawnCards = cards.map(id => ALL_CARDS_BY_ID.get(id)).filter(Boolean);
 
     // Cartes jamais obtenues avant ce booster (badge "Nouvelle !")
     const seen = new Set(Object.keys(userData.collection || {}).filter(id => userData.collection[id]?.quantity > 0));
@@ -316,14 +306,6 @@ async function openBooster(boosterType) {
         return true;
     });
 
-    // Si l'enregistrement échoue, l'erreur remonte à handleOpenBooster : on n'affiche
-    // pas des cartes qui n'ont pas été ajoutées à la collection.
-    await saveOpenedBooster(userData.uid, boosterType, drawnCards);
-
-    // Quêtes et stats en arrière-plan : l'animation n'attend pas
-    updateQuestsAfterBoosterOpen(drawBoosterType, drawnCards);
-    updateUserStats(userData.uid, { boostersOpened: 1 });
-
     // Mise en scène de l'ouverture (booster-animation.js), puis retour à la sélection
     await playBoosterOpening({ cards: drawnCards, isNew, boosterType });
     const updatedUserDoc = await getDoc(doc(db, "users", userData.uid));
@@ -331,32 +313,13 @@ async function openBooster(boosterType) {
     displayAvailableBoosters();
 }
 
-async function updateQuestsAfterBoosterOpen(boosterType, drawnCards) {
-    await updateQuestProgress('obtain_10_diff_cards_24h', 1, { cardIds: drawnCards.map(c => c.id) });
-    await updateQuestProgress('open_booster');
-    if (boosterType === 'legendary') {
-        await updateQuestProgress('open_legendary_booster');
-    }
-    if (boosterType === 'v2') {
-        await updateQuestProgress('open_v2_booster');
-    }
-    if (boosterType === 'v3' || boosterType === 'v3_legendary') {
-        await updateQuestProgress('open_v3_booster');
-    }
-    // Cartes V3 rares ou mieux (quêtes V3)
-    const v3Good = drawnCards.filter(c => c.version === 'v3' && c.rarity !== 'Commune').length;
-    if (v3Good) await updateQuestProgress('pull_v3_rare_plus', v3Good);
-    const v3Top = drawnCards.filter(c => c.version === 'v3' && (c.rarity === 'epique' || c.rarity === 'Légendaire')).length;
-    if (v3Top) await updateQuestProgress('pull_v3_epic_plus', v3Top);
-}
-
 async function checkAndResetDailyCounter() {
-    // Même minuit que la boutique et les quêtes du jour (heure de Paris)
+    // Même minuit que la boutique et les quêtes du jour (heure de Paris) : le serveur vérifie et remet à zéro
     const today = getDayKey();
     const lastReset = userData.dailyLastReset ? getDayKey(new Date(userData.dailyLastReset.seconds * 1000)) : null;
     if (today !== lastReset) {
         try {
-            await resetDailyCounters(userData.uid);
+            await callServer('resetDaily');
             userData.dailyBoosterOpenedCount = 0;
             userData.dailyV2BoosterOpenedCount = 0;
         } catch (e) {

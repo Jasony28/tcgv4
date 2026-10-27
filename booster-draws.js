@@ -1,5 +1,8 @@
 // Fichier: booster-draws.js — contenu des boosters (réglages de l'économie)
 import { allCards } from './cards.js';
+import { allCardsV2 } from './cards1.js';
+import { allCardsV3Released } from './cards-v3.js';
+import { mainDailyBoosterType } from './series-config.js';
 
 // Boosters gratuits par jour (page Booster) : chaque collection a son propre compteur
 export const DAILY_BOOSTER_LIMIT = 3;     // booster principal : V1, puis V3 une fois la V1 terminée
@@ -44,4 +47,18 @@ export function drawLegendaryBoosterCards(cardSet = allCards) {
     for (let i = 0; i < 4; i++) drawn.push(pick(commonAndRares));
     drawn.push(pick(legendaries));
     return drawn.sort(() => Math.random() - 0.5);
+}
+
+/**
+ * Tire les cartes d'un booster (sur le serveur : le joueur ne peut pas choisir ses cartes).
+ * @param {string} boosterType - 'daily' / 'daily_v2' (gratuits du jour) ou un type de l'inventaire
+ */
+export function drawBooster(boosterType) {
+    // Boosters gratuits du jour : principal (V1 puis V3) et V2, chacun son compteur
+    const type = { daily: mainDailyBoosterType(), daily_v2: 'v2' }[boosterType] || boosterType;
+    if (type === 'legendary') return drawLegendaryBoosterCards();
+    if (type === 'v3_legendary') return drawLegendaryBoosterCards(allCardsV3Released);
+    if (type === 'v3') return drawClassicBoosterCards(allCardsV3Released, LEGENDARY_CHANCE.v3);
+    if (type === 'v2') return drawClassicBoosterCards(allCardsV2, LEGENDARY_CHANCE.v2);
+    return drawClassicBoosterCards();
 }

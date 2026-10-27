@@ -1,0 +1,8 @@
+# Serveur du TCG sur Cloudflare Workers (offre gratuite : 100 000 requêtes par jour)
+name = "tcg-serveur"
+main = "dist/worker.js"
+compatibility_date = "2025-01-01"
+no_bundle = true
+
+[vars]
+FIREBASE_PROJECT_ID = "tcgjwbndr"

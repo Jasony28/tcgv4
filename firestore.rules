@@ -1,14 +1,13 @@
 rules_version = '2';
 // Règles de sécurité Firestore du TCG JWBnDr.
-// Déploiement : firebase deploy --only firestore:rules   (ou copier-coller dans la console Firebase → Firestore → Règles)
+// Déploiement : automatique sur main (GitHub Actions « Règles Firestore »), ou copier-coller dans
+// la console Firebase → Firestore → Règles → Publier.
 // Tests : cd tests && npm install && npm test   (émulateur Firebase, Java nécessaire)
 //
-// ANTI-TRICHE DE L'ÉCONOMIE (pièces, cartes, boosters, displays)
-//  - Mon compte, écriture « seule » : chaque gain a une valeur (econ-config.js). Les gains du jour
-//    s'additionnent dans econ.used et ne peuvent pas dépasser dailyGainLimit() : se donner des pièces ou
-//    des cartes en modifiant son compte ne marche plus. Les succès sont vérifiés à part (cartes possédées).
-//  - Affaire entre joueurs (enchère, échange, don de clan) : l'écriture porte lastDeal.at = heure du serveur,
-//    et ce que chaque joueur donne et reçoit est vérifié au chiffre près avec l'annonce ou l'échange.
+// ANTI-TRICHE : toute l'économie (pièces, cartes, boosters, displays, Pass, quêtes, statistiques, marché,
+// échanges, dons de clan) est calculée par le serveur du jeu (dossier server/, Cloudflare Worker), qui écrit
+// avec un compte de service et n'est pas soumis à ces règles. Un joueur ne peut modifier lui-même que son
+// pseudo (une fois), ses amis, son clan, sa présence en ligne et ses cadeaux lus.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -28,8 +27,6 @@ service cloud.firestore {
     }
 
     function upath(uid) { return /databases/$(database)/documents/users/$(uid); }
-    function lpath(id) { return /databases/$(database)/documents/auctions/$(id); }
-    function tpath(id) { return /databases/$(database)/documents/tradeRequests/$(id); }
 
     // Dans la liste « field » (ex : friendRequests), je ne peux ajouter ou retirer que MON identifiant
     function onlyMyIdChanges(field) {
@@ -50,648 +47,41 @@ service cloud.firestore {
           && (!changedKeys().hasAny(['friendRequests']) || onlyMyIdChanges('friendRequests'))
           && (!changedKeys().hasAny(['friends']) || onlyMyIdChanges('friends'))
           && (!addsMeToFriends
-              || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('friends', []).hasAny([userId]));
+              || get(upath(request.auth.uid)).data.get('friends', []).hasAny([userId]));
     }
 
-    // --- ÉCONOMIE : chiffres et listes recopiés depuis le jeu ---
-
-    // ----- GÉNÉRÉ par scripts/gen-rules-data.mjs : ne pas modifier à la main -----
-    function dailyGainLimit() { return 1000; }
-    function dailyBoosterLimit() { return 3; }
-    function dailyV2BoosterLimit() { return 2; }
-    // Cartes de chaque rareté
-    function cIds() { return ['C01', 'C02', 'C03', 'C04', 'C05', 'C06', 'C07', 'C08', 'C09', 'C10', 'C11', 'C12', 'V2_C01', 'V2_C02', 'V3_001', 'V3_002', 'V3_003', 'V3_012', 'V3_013', 'V3_014', 'V3_023', 'V3_024', 'V3_025']; }
-    function rIds() { return ['R01', 'R02', 'R03', 'R04', 'R05', 'R06', 'R07', 'R08', 'V2_R01', 'V2_R02', 'V3_004', 'V3_005', 'V3_006', 'V3_015', 'V3_016', 'V3_017', 'V3_026', 'V3_027', 'V3_028', 'V3_029']; }
-    function eIds() { return ['E01', 'E02', 'E03', 'E04', 'E05', 'V2_E01', 'V3_007', 'V3_008', 'V3_009', 'V3_018', 'V3_019', 'V3_020', 'V3_030', 'V3_031', 'V3_032']; }
-    function lIds() { return ['L01', 'L02', 'L03', 'L04', 'L05', 'L06', 'L07', 'V2_L01', 'V2_L02', 'V2_L03', 'V2_L04', 'V2_L05', 'V2_L06', 'V3_010', 'V3_011', 'V3_021', 'V3_022', 'V3_033', 'V3_034', 'V3_035']; }
-    // Valeur des cartes gagnées ou perdues (k = cartes du reçu, c0 / c1 = collection avant / après)
-    function cardsGain(c0, c1, k) {
-      return 1 * cardSum(c0, c1, k.get('c', []))
-        + 2 * cardSum(c0, c1, k.get('r', []))
-        + 8 * cardSum(c0, c1, k.get('e', []))
-        + 100 * cardSum(c0, c1, k.get('l', []));
+    // Mon compte : seulement ces champs, jamais l'économie
+    function ownUpdateValid() {
+      let b = resource.data;
+      let a = request.resource.data;
+      return changedKeys().hasOnly(['pseudo', 'pseudoChanged', 'lastOnline', 'giftInbox', 'friends', 'friendRequests', 'clanId'])
+        // Pseudo : une seule fois, 3 à 20 caractères
+        && (!changedKeys().hasAny(['pseudo', 'pseudoChanged'])
+            || (b.get('pseudoChanged', false) != true && a.get('pseudoChanged', false) == true
+                && a.pseudo is string && a.pseudo.size() >= 3 && a.pseudo.size() <= 20))
+        && (!changedKeys().hasAny(['lastOnline']) || a.lastOnline == request.time)
+        // Cadeaux reçus : on ne peut que les retirer (les objets sont donnés par le serveur)
+        && (!changedKeys().hasAny(['giftInbox']) || b.get('giftInbox', []).toSet().hasAll(a.get('giftInbox', [])))
+        && (!changedKeys().hasAny(['clanId']) || !('clanId' in a) || a.clanId is string);
     }
-    function rarityListsValid(k) {
-      return (k.get('c', []).size() == 0 || k.get('c', []).toSet().hasOnly(cIds()))
-        && (k.get('r', []).size() == 0 || k.get('r', []).toSet().hasOnly(rIds()))
-        && (k.get('e', []).size() == 0 || k.get('e', []).toSet().hasOnly(eIds()))
-        && (k.get('l', []).size() == 0 || k.get('l', []).toSet().hasOnly(lIds()));
-    }
-    // Toutes les cartes du jeu (pour vérifier une liste de cartes d'un coup)
-    function allCardIds() { return ['C01', 'C02', 'C03', 'C04', 'C05', 'C06', 'C07', 'C08', 'C09', 'C10', 'C11', 'C12', 'R01', 'R02', 'R03', 'R04', 'R05', 'R06', 'R07', 'R08', 'E01', 'E02', 'E03', 'E04', 'E05', 'L01', 'L02', 'L03', 'L04', 'L05', 'L06', 'L07', 'V2_C01', 'V2_C02', 'V2_R01', 'V2_R02', 'V2_E01', 'V2_L01', 'V2_L02', 'V2_L03', 'V2_L04', 'V2_L05', 'V2_L06', 'V3_001', 'V3_002', 'V3_003', 'V3_004', 'V3_005', 'V3_006', 'V3_007', 'V3_008', 'V3_009', 'V3_010', 'V3_011', 'V3_012', 'V3_013', 'V3_014', 'V3_015', 'V3_016', 'V3_017', 'V3_018', 'V3_019', 'V3_020', 'V3_021', 'V3_022', 'V3_023', 'V3_024', 'V3_025', 'V3_026', 'V3_027', 'V3_028', 'V3_029', 'V3_030', 'V3_031', 'V3_032', 'V3_033', 'V3_034', 'V3_035']; }
-    // Carte connue du jeu
-    function isCard(id) { return id is string && id.matches('^(C01|C02|C03|C04|C05|C06|C07|C08|C09|C10|C11|C12|R01|R02|R03|R04|R05|R06|R07|R08|E01|E02|E03|E04|E05|L01|L02|L03|L04|L05|L06|L07|V2_C01|V2_C02|V2_R01|V2_R02|V2_E01|V2_L01|V2_L02|V2_L03|V2_L04|V2_L05|V2_L06|V3_001|V3_002|V3_003|V3_004|V3_005|V3_006|V3_007|V3_008|V3_009|V3_010|V3_011|V3_012|V3_013|V3_014|V3_015|V3_016|V3_017|V3_018|V3_019|V3_020|V3_021|V3_022|V3_023|V3_024|V3_025|V3_026|V3_027|V3_028|V3_029|V3_030|V3_031|V3_032|V3_033|V3_034|V3_035)$'); }
-    function boosterValues() { return {'classic': 10, 'v2': 13, 'v3': 10, 'legendary': 100, 'v3_legendary': 100}; }
-    function displayValues() { return {'classic': 120, 'v2': 130, 'v3': 100, 'legendary': 400}; }
-    // Succès « id » réclamé : valeur de sa récompense, si toutes ses cartes sont bien dans la collection
-    function achievementBonus(id, col) {
-      return false ? 0
-        : id == 'v1_commune' ? (col['C01'].quantity > 0
-            && col['C02'].quantity > 0
-            && col['C03'].quantity > 0
-            && col['C04'].quantity > 0
-            && col['C05'].quantity > 0
-            && col['C06'].quantity > 0
-            && col['C07'].quantity > 0
-            && col['C08'].quantity > 0
-            && col['C09'].quantity > 0
-            && col['C10'].quantity > 0
-            && col['C11'].quantity > 0
-            && col['C12'].quantity > 0 ? 30 : 0)
-        : id == 'v1_rare' ? (col['R01'].quantity > 0
-            && col['R02'].quantity > 0
-            && col['R03'].quantity > 0
-            && col['R04'].quantity > 0
-            && col['R05'].quantity > 0
-            && col['R06'].quantity > 0
-            && col['R07'].quantity > 0
-            && col['R08'].quantity > 0 ? 70 : 0)
-        : id == 'v1_epique' ? (col['E01'].quantity > 0
-            && col['E02'].quantity > 0
-            && col['E03'].quantity > 0
-            && col['E04'].quantity > 0
-            && col['E05'].quantity > 0 ? 140 : 0)
-        : id == 'v1_legendaire' ? (col['L01'].quantity > 0
-            && col['L02'].quantity > 0
-            && col['L03'].quantity > 0
-            && col['L04'].quantity > 0
-            && col['L05'].quantity > 0
-            && col['L06'].quantity > 0
-            && col['L07'].quantity > 0 ? 250 : 0)
-        : id == 'v1_album' ? (col['C01'].quantity > 0
-            && col['C02'].quantity > 0
-            && col['C03'].quantity > 0
-            && col['C04'].quantity > 0
-            && col['C05'].quantity > 0
-            && col['C06'].quantity > 0
-            && col['C07'].quantity > 0
-            && col['C08'].quantity > 0
-            && col['C09'].quantity > 0
-            && col['C10'].quantity > 0
-            && col['C11'].quantity > 0
-            && col['C12'].quantity > 0
-            && col['R01'].quantity > 0
-            && col['R02'].quantity > 0
-            && col['R03'].quantity > 0
-            && col['R04'].quantity > 0
-            && col['R05'].quantity > 0
-            && col['R06'].quantity > 0
-            && col['R07'].quantity > 0
-            && col['R08'].quantity > 0
-            && col['E01'].quantity > 0
-            && col['E02'].quantity > 0
-            && col['E03'].quantity > 0
-            && col['E04'].quantity > 0
-            && col['E05'].quantity > 0
-            && col['L01'].quantity > 0
-            && col['L02'].quantity > 0
-            && col['L03'].quantity > 0
-            && col['L04'].quantity > 0
-            && col['L05'].quantity > 0
-            && col['L06'].quantity > 0
-            && col['L07'].quantity > 0 ? 500 : 0)
-        : id == 'v2_commune' ? (col['V2_C01'].quantity > 0
-            && col['V2_C02'].quantity > 0 ? 20 : 0)
-        : id == 'v2_rare' ? (col['V2_R01'].quantity > 0
-            && col['V2_R02'].quantity > 0 ? 60 : 0)
-        : id == 'v2_epique' ? (col['V2_E01'].quantity > 0 ? 60 : 0)
-        : id == 'v2_legendaire' ? (col['V2_L01'].quantity > 0
-            && col['V2_L02'].quantity > 0
-            && col['V2_L03'].quantity > 0
-            && col['V2_L04'].quantity > 0
-            && col['V2_L05'].quantity > 0
-            && col['V2_L06'].quantity > 0 ? 250 : 0)
-        : id == 'v2_album' ? (col['V2_C01'].quantity > 0
-            && col['V2_C02'].quantity > 0
-            && col['V2_R01'].quantity > 0
-            && col['V2_R02'].quantity > 0
-            && col['V2_E01'].quantity > 0
-            && col['V2_L01'].quantity > 0
-            && col['V2_L02'].quantity > 0
-            && col['V2_L03'].quantity > 0
-            && col['V2_L04'].quantity > 0
-            && col['V2_L05'].quantity > 0
-            && col['V2_L06'].quantity > 0 ? 460 : 0)
-        : id == 'v3_commune' ? (col['V3_001'].quantity > 0
-            && col['V3_002'].quantity > 0
-            && col['V3_003'].quantity > 0
-            && col['V3_012'].quantity > 0
-            && col['V3_013'].quantity > 0
-            && col['V3_014'].quantity > 0
-            && col['V3_023'].quantity > 0
-            && col['V3_024'].quantity > 0
-            && col['V3_025'].quantity > 0 ? 85 : 0)
-        : id == 'v3_rare' ? (col['V3_004'].quantity > 0
-            && col['V3_005'].quantity > 0
-            && col['V3_006'].quantity > 0
-            && col['V3_015'].quantity > 0
-            && col['V3_016'].quantity > 0
-            && col['V3_017'].quantity > 0
-            && col['V3_026'].quantity > 0
-            && col['V3_027'].quantity > 0
-            && col['V3_028'].quantity > 0
-            && col['V3_029'].quantity > 0 ? 115 : 0)
-        : id == 'v3_epique' ? (col['V3_007'].quantity > 0
-            && col['V3_008'].quantity > 0
-            && col['V3_009'].quantity > 0
-            && col['V3_018'].quantity > 0
-            && col['V3_019'].quantity > 0
-            && col['V3_020'].quantity > 0
-            && col['V3_030'].quantity > 0
-            && col['V3_031'].quantity > 0
-            && col['V3_032'].quantity > 0 ? 170 : 0)
-        : id == 'v3_legendaire' ? (col['V3_010'].quantity > 0
-            && col['V3_011'].quantity > 0
-            && col['V3_021'].quantity > 0
-            && col['V3_022'].quantity > 0
-            && col['V3_033'].quantity > 0
-            && col['V3_034'].quantity > 0
-            && col['V3_035'].quantity > 0 ? 340 : 0)
-        : id == 'v3_album' ? (col['V3_001'].quantity > 0
-            && col['V3_002'].quantity > 0
-            && col['V3_003'].quantity > 0
-            && col['V3_004'].quantity > 0
-            && col['V3_005'].quantity > 0
-            && col['V3_006'].quantity > 0
-            && col['V3_007'].quantity > 0
-            && col['V3_008'].quantity > 0
-            && col['V3_009'].quantity > 0
-            && col['V3_010'].quantity > 0
-            && col['V3_011'].quantity > 0
-            && col['V3_012'].quantity > 0
-            && col['V3_013'].quantity > 0
-            && col['V3_014'].quantity > 0
-            && col['V3_015'].quantity > 0
-            && col['V3_016'].quantity > 0
-            && col['V3_017'].quantity > 0
-            && col['V3_018'].quantity > 0
-            && col['V3_019'].quantity > 0
-            && col['V3_020'].quantity > 0
-            && col['V3_021'].quantity > 0
-            && col['V3_022'].quantity > 0
-            && col['V3_023'].quantity > 0
-            && col['V3_024'].quantity > 0
-            && col['V3_025'].quantity > 0
-            && col['V3_026'].quantity > 0
-            && col['V3_027'].quantity > 0
-            && col['V3_028'].quantity > 0
-            && col['V3_029'].quantity > 0
-            && col['V3_030'].quantity > 0
-            && col['V3_031'].quantity > 0
-            && col['V3_032'].quantity > 0
-            && col['V3_033'].quantity > 0
-            && col['V3_034'].quantity > 0
-            && col['V3_035'].quantity > 0 ? 780 : 0)
-        : id == 'all_albums' ? (col['C01'].quantity > 0
-            && col['C02'].quantity > 0
-            && col['C03'].quantity > 0
-            && col['C04'].quantity > 0
-            && col['C05'].quantity > 0
-            && col['C06'].quantity > 0
-            && col['C07'].quantity > 0
-            && col['C08'].quantity > 0
-            && col['C09'].quantity > 0
-            && col['C10'].quantity > 0
-            && col['C11'].quantity > 0
-            && col['C12'].quantity > 0
-            && col['R01'].quantity > 0
-            && col['R02'].quantity > 0
-            && col['R03'].quantity > 0
-            && col['R04'].quantity > 0
-            && col['R05'].quantity > 0
-            && col['R06'].quantity > 0
-            && col['R07'].quantity > 0
-            && col['R08'].quantity > 0
-            && col['E01'].quantity > 0
-            && col['E02'].quantity > 0
-            && col['E03'].quantity > 0
-            && col['E04'].quantity > 0
-            && col['E05'].quantity > 0
-            && col['L01'].quantity > 0
-            && col['L02'].quantity > 0
-            && col['L03'].quantity > 0
-            && col['L04'].quantity > 0
-            && col['L05'].quantity > 0
-            && col['L06'].quantity > 0
-            && col['L07'].quantity > 0
-            && col['V2_C01'].quantity > 0
-            && col['V2_C02'].quantity > 0
-            && col['V2_R01'].quantity > 0
-            && col['V2_R02'].quantity > 0
-            && col['V2_E01'].quantity > 0
-            && col['V2_L01'].quantity > 0
-            && col['V2_L02'].quantity > 0
-            && col['V2_L03'].quantity > 0
-            && col['V2_L04'].quantity > 0
-            && col['V2_L05'].quantity > 0
-            && col['V2_L06'].quantity > 0 ? 800 : 0)
-        : 0;
-    }
-    // ----- FIN DU GÉNÉRÉ -----
-
-    function boosterTypes() { return ['classic', 'v2', 'v3', 'legendary', 'v3_legendary']; }
-    function displayTypes() { return ['classic', 'v2', 'v3', 'legendary']; }
-
-    // Jour UTC et jour à Paris (heure d'été : du dernier dimanche de mars au dernier dimanche d'octobre, 1 h UTC)
-    function utcDay() { return int(request.time.toMillis() / 86400000); }
-    function lastSundayMs(y, m) {
-      let d = timestamp.date(y, m, 31);
-      return d.toMillis() - (d.dayOfWeek() % 7) * 86400000;
-    }
-    function parisDay(t) {
-      let ms = t.toMillis();
-      let summer = ms >= lastSundayMs(t.year(), 3) + 3600000 && ms < lastSundayMs(t.year(), 10) + 3600000;
-      return int((ms + (summer ? 7200000 : 3600000)) / 86400000);
-    }
-
-    // Quantités (col = collection d'un compte : { id: { quantity } })
-    function qty(col, id) { return col.get(id, {}).get('quantity', 0); }
-    function coinDelta(b, a) { return a.get('coins', 0) - b.get('coins', 0); }
-    function cardKeys(b, a) { return a.get('collection', {}).diff(b.get('collection', {})).affectedKeys(); }
-    function invKeys(m0, m1) { return m1.diff(m0).affectedKeys(); }
-    function econChanged(b, a) {
-      return a.diff(b).affectedKeys().hasAny(['coins', 'collection', 'boosterInventory', 'displayInventory']);
-    }
-
-    function natural(m, k) { return m.get(k, 0) >= 0; }
-    function coinsValid(b, a) {
-      return !a.diff(b).affectedKeys().hasAny(['coins']) || (a.get('coins', 0) is int && a.get('coins', 0) >= 0);
-    }
-    // Inventaires (m0 avant, m1 après) : seulement des types connus, jamais négatifs
-    function boostersValid(m0, m1) {
-      return m1 == m0 || (invKeys(m0, m1).hasOnly(boosterTypes())
-        && natural(m1, 'classic') && natural(m1, 'v2') && natural(m1, 'v3') && natural(m1, 'legendary') && natural(m1, 'v3_legendary'));
-    }
-    function displaysValid(m0, m1) {
-      return m1 == m0 || (invKeys(m0, m1).hasOnly(displayTypes())
-        && natural(m1, 'classic') && natural(m1, 'v2') && natural(m1, 'v3') && natural(m1, 'legendary'));
-    }
-    function balancesValid(b, a) {
-      return coinsValid(b, a)
-        && boostersValid(b.get('boosterInventory', {}), a.get('boosterInventory', {}))
-        && displaysValid(b.get('displayInventory', {}), a.get('displayInventory', {}));
-    }
-
-    // --- 1) MON COMPTE, ÉCRITURE SEULE : plafond de gains du jour ---
-
-    function d(m0, m1, k) { return m1.get(k, 0) - m0.get(k, 0); }
-    function boostersValue(m0, m1, v) {
-      return m1 == m0 ? 0 : v.classic * d(m0, m1, 'classic') + v.v2 * d(m0, m1, 'v2') + v.v3 * d(m0, m1, 'v3')
-        + v.legendary * d(m0, m1, 'legendary') + v.v3_legendary * d(m0, m1, 'v3_legendary');
-    }
-    function displaysValue(m0, m1, v) {
-      return m1 == m0 ? 0 : v.classic * d(m0, m1, 'classic') + v.v2 * d(m0, m1, 'v2')
-        + v.v3 * d(m0, m1, 'v3') + v.legendary * d(m0, m1, 'legendary');
-    }
-    // Reçu : cards = { c, r, e, l } = les cartes touchées par l'écriture, rangées par rareté (12 au maximum)
-    function cardSum(c0, c1, l) {
-      return (l.size() <= 0 ? 0 : (c1.get(l[0], {}).get('quantity', 0) - c0.get(l[0], {}).get('quantity', 0)) + (l.size() <= 1 ? 0 : (c1.get(l[1], {}).get('quantity', 0) - c0.get(l[1], {}).get('quantity', 0)) + (l.size() <= 2 ? 0 : (c1.get(l[2], {}).get('quantity', 0) - c0.get(l[2], {}).get('quantity', 0)) + (l.size() <= 3 ? 0 : (c1.get(l[3], {}).get('quantity', 0) - c0.get(l[3], {}).get('quantity', 0)) + (l.size() <= 4 ? 0 : (c1.get(l[4], {}).get('quantity', 0) - c0.get(l[4], {}).get('quantity', 0)) + (l.size() <= 5 ? 0 : (c1.get(l[5], {}).get('quantity', 0) - c0.get(l[5], {}).get('quantity', 0)) + (l.size() <= 6 ? 0 : (c1.get(l[6], {}).get('quantity', 0) - c0.get(l[6], {}).get('quantity', 0)) + (l.size() <= 7 ? 0 : (c1.get(l[7], {}).get('quantity', 0) - c0.get(l[7], {}).get('quantity', 0)) + (l.size() <= 8 ? 0 : (c1.get(l[8], {}).get('quantity', 0) - c0.get(l[8], {}).get('quantity', 0)) + (l.size() <= 9 ? 0 : (c1.get(l[9], {}).get('quantity', 0) - c0.get(l[9], {}).get('quantity', 0)) + (l.size() <= 10 ? 0 : (c1.get(l[10], {}).get('quantity', 0) - c0.get(l[10], {}).get('quantity', 0)) + (l.size() <= 11 ? 0 : (c1.get(l[11], {}).get('quantity', 0) - c0.get(l[11], {}).get('quantity', 0)) + 0))))))))))));
-    }
-    function cardsNatural(c1, l) {
-      return (l.size() <= 0 || (c1.get(l[0], {}).get('quantity', 0) >= 0 && (l.size() <= 1 || (c1.get(l[1], {}).get('quantity', 0) >= 0 && (l.size() <= 2 || (c1.get(l[2], {}).get('quantity', 0) >= 0 && (l.size() <= 3 || (c1.get(l[3], {}).get('quantity', 0) >= 0 && (l.size() <= 4 || (c1.get(l[4], {}).get('quantity', 0) >= 0 && (l.size() <= 5 || (c1.get(l[5], {}).get('quantity', 0) >= 0 && (l.size() <= 6 || (c1.get(l[6], {}).get('quantity', 0) >= 0 && (l.size() <= 7 || (c1.get(l[7], {}).get('quantity', 0) >= 0 && (l.size() <= 8 || (c1.get(l[8], {}).get('quantity', 0) >= 0 && (l.size() <= 9 || (c1.get(l[9], {}).get('quantity', 0) >= 0 && (l.size() <= 10 || (c1.get(l[10], {}).get('quantity', 0) >= 0 && (l.size() <= 11 || (c1.get(l[11], {}).get('quantity', 0) >= 0 && true))))))))))))))))))))))));
-    }
-    function cardListValid(c0, c1, k) {
-      return c1 == c0 || (k is map && k.keys().hasOnly(['c', 'r', 'e', 'l'])
-        && k.get('c', []).size() + k.get('r', []).size() + k.get('e', []).size() + k.get('l', []).size() <= 12
-        && k.get('c', []).toSet().size() == k.get('c', []).size() && k.get('r', []).toSet().size() == k.get('r', []).size()
-        && k.get('e', []).toSet().size() == k.get('e', []).size() && k.get('l', []).toSet().size() == k.get('l', []).size()
-        && rarityListsValid(k)
-        && c1.diff(c0).affectedKeys().hasOnly(k.get('c', []).concat(k.get('r', [])).concat(k.get('e', [])).concat(k.get('l', []))));
-    }
-    // Vérifié par la règle du compte (sa propre limite de calcul) : aucune carte du reçu ne passe sous zéro
-    function receiptCardsNatural(c1, k) {
-      return cardsNatural(c1, k.get('c', [])) && cardsNatural(c1, k.get('r', []))
-        && cardsNatural(c1, k.get('e', [])) && cardsNatural(c1, k.get('l', []));
-    }
-    // Reçu econ/{uid} écrit dans la même transaction : la valeur des cartes y est vérifiée à part
-    // (chaque document a sa propre limite de calcul dans les règles)
-    function epath(uid) { return /databases/$(database)/documents/econ/$(uid); }
-    function receiptValid(r, c0, c1) {
-      return r.keys().hasOnly(['at', 'cards', 'gain']) && r.at == request.time
-        && cardListValid(c0, c1, r.cards) && r.gain == cardsGain(c0, c1, r.cards);
-    }
-    function cardsPart(b, a, uid) {
-      return a.get('collection', {}) == b.get('collection', {}) ? 0 : getAfter(epath(uid)).data.gain;
-    }
-    function receiptWritten(b, a, uid) {
-      return a.get('collection', {}) == b.get('collection', {})
-        || (getAfter(epath(uid)).data.at == request.time && receiptCardsNatural(a.get('collection', {}), getAfter(epath(uid)).data.cards));
-    }
-    function gainOf(b, a, uid) {
-      return !econChanged(b, a) ? 0 : coinDelta(b, a)
-        + boostersValue(b.get('boosterInventory', {}), a.get('boosterInventory', {}), boosterValues())
-        + displaysValue(b.get('displayInventory', {}), a.get('displayInventory', {}), displayValues())
-        + cardsPart(b, a, uid);
-    }
-    // Succès réclamé dans cette écriture (econ.claim) : sa récompense ne compte pas dans le plafond
-    function bonusOf(added, a) {
-      return added.size() == 1 && added.hasAll([a.get('econ', {}).get('claim', '')])
-        ? achievementBonus(a.econ.claim, a.get('collection', {})) : 0;
-    }
-
-    // econ = { day, used, cards } : gains positifs du jour UTC « day »
-    function ledgerOk(e0, e1, net, day) {
-      return e1.keys().hasOnly(['day', 'used', 'claim'])
-        && (net <= 0
-          ? ((e1.get('day', 0) == e0.get('day', 0) && e1.get('used', 0) == e0.get('used', 0))
-             || (e1.get('day', 0) == day && e1.get('used', 0) == (e0.get('day', 0) == day ? e0.get('used', 0) : 0)))
-          : (e1.get('day', 0) == day
-             && e1.get('used', 0) == (e0.get('day', 0) == day ? e0.get('used', 0) : 0) + net
-             && e1.get('used', 0) <= dailyGainLimit()));
-    }
-
-    // Succès : on ne peut qu'en ajouter (une récompense ne se réclame qu'une fois)
-    function achievementsAppendOnly(m0, m1) {
-      return m1 == m0 || (m1.diff(m0).changedKeys().size() == 0 && m1.diff(m0).removedKeys().size() == 0);
-    }
-
-    // Boosters gratuits du jour : remise à zéro une fois par jour (heure de Paris, horloge du serveur)
-    function dailyResetOk(b, a) {
-      return a.get('dailyLastReset', null) == request.time
-        && a.get('dailyBoosterOpenedCount', 0) == 0 && a.get('dailyV2BoosterOpenedCount', 0) == 0
-        && (b.get('dailyLastReset', null) == null || parisDay(b.dailyLastReset) < parisDay(request.time));
-    }
-    function dailyCountersValid(b, a, c) {
-      return !c.hasAny(['dailyLastReset', 'dailyBoosterOpenedCount', 'dailyV2BoosterOpenedCount'])
-        || (c.hasAny(['dailyLastReset']) ? dailyResetOk(b, a)
-          : (a.get('dailyBoosterOpenedCount', 0) >= b.get('dailyBoosterOpenedCount', 0)
-              && a.get('dailyV2BoosterOpenedCount', 0) >= b.get('dailyV2BoosterOpenedCount', 0)
-              && a.get('dailyBoosterOpenedCount', 0) <= dailyBoosterLimit()
-              && a.get('dailyV2BoosterOpenedCount', 0) <= dailyV2BoosterLimit()));
-    }
-
-    function soloValid(b, a, c, uid) {
-      return !c.hasAny(['lastDeal'])
-        && balancesValid(b, a)
-        && receiptWritten(b, a, uid)
-        && achievementsAppendOnly(b.get('achievements', {}), a.get('achievements', {}))
-        && (b.get('packsBought', {}).get('starter', false) != true || a.get('packsBought', {}).get('starter', false) == true)
-        && dailyCountersValid(b, a, c)
-        && ledgerOk(b.get('econ', {}), a.get('econ', {}),
-             gainOf(b, a, uid) - bonusOf(a.get('achievements', {}).diff(b.get('achievements', {})).addedKeys(), a), utcDay());
-    }
-    function soloUpdateValid(uid) {
-      return soloValid(resource.data, request.resource.data, changedKeys(), uid);
-    }
-
-    // --- 2) AFFAIRE ENTRE JOUEURS : vérifiée au chiffre près ---
-
-    function isDealWrite() {
-      let d = request.resource.data.get('lastDeal', null);
-      return d is map && d.get('at', null) == request.time;
-    }
-    // Le compte de ce joueur a bien été modifié pour cette affaire dans la même transaction
-    function stamped(uid, kind, id) { return stampOk(getAfter(upath(uid)).data.get('lastDeal', {}), kind, id); }
-    function stampOk(d, kind, id) { return d.get('at', null) == request.time && d.get('kind', '') == kind && d.get('id', '') == id; }
-
-    // Objet d'une annonce (les anciennes annonces ont cardId / quantity à la racine)
-    function listingItem(l) {
-      return l.get('item', { 'type': 'card', 'cardId': l.get('cardId', ''), 'quantity': l.get('quantity', 1) });
-    }
-    function itemCards(item) {
-      return item.type == 'card' ? [item.cardId] : (item.type == 'bundle' ? item.cards.keys() : []);
-    }
-    // Le compte reçoit (mult = 1), rend (-1) ou ne touche pas (0) l'objet, et donne (gmult = -1) ou reçoit (1)
-    // un exemplaire de chaque carte « giving » (jamais une carte de l'objet : vérifié à la mise en vente).
-    // Après l'écriture, le compte a forcément une entrée pour chaque carte reçue ou donnée : c1[id] existe.
-    function qtyMove(c0, c1, id, n) {
-      return c1[id].quantity - c0.get(id, {}).get('quantity', 0) == n && c1[id].quantity >= 0;
-    }
-    // Lot reçu / mis en dépôt (quantités du lot : 1 minimum)
-    function bundleIn(c0, c1, cards, l) {
-      return (l.size() <= 0 || (c1[l[0]].quantity - c0.get(l[0], {}).get('quantity', 0) == cards[l[0]] && (l.size() <= 1 || (c1[l[1]].quantity - c0.get(l[1], {}).get('quantity', 0) == cards[l[1]] && (l.size() <= 2 || (c1[l[2]].quantity - c0.get(l[2], {}).get('quantity', 0) == cards[l[2]] && (l.size() <= 3 || (c1[l[3]].quantity - c0.get(l[3], {}).get('quantity', 0) == cards[l[3]] && (l.size() <= 4 || (c1[l[4]].quantity - c0.get(l[4], {}).get('quantity', 0) == cards[l[4]] && (l.size() <= 5 || (c1[l[5]].quantity - c0.get(l[5], {}).get('quantity', 0) == cards[l[5]] && (l.size() <= 6 || (c1[l[6]].quantity - c0.get(l[6], {}).get('quantity', 0) == cards[l[6]] && (l.size() <= 7 || (c1[l[7]].quantity - c0.get(l[7], {}).get('quantity', 0) == cards[l[7]] && (l.size() <= 8 || (c1[l[8]].quantity - c0.get(l[8], {}).get('quantity', 0) == cards[l[8]] && (l.size() <= 9 || (c1[l[9]].quantity - c0.get(l[9], {}).get('quantity', 0) == cards[l[9]] && true))))))))))))))))))));
-    }
-    function bundleOut(c0, c1, cards, l) {
-      return (l.size() <= 0 || (cards[l[0]] >= 1 && c0[l[0]].quantity - c1[l[0]].quantity == cards[l[0]] && c1[l[0]].quantity >= 0 && (l.size() <= 1 || (cards[l[1]] >= 1 && c0[l[1]].quantity - c1[l[1]].quantity == cards[l[1]] && c1[l[1]].quantity >= 0 && (l.size() <= 2 || (cards[l[2]] >= 1 && c0[l[2]].quantity - c1[l[2]].quantity == cards[l[2]] && c1[l[2]].quantity >= 0 && (l.size() <= 3 || (cards[l[3]] >= 1 && c0[l[3]].quantity - c1[l[3]].quantity == cards[l[3]] && c1[l[3]].quantity >= 0 && (l.size() <= 4 || (cards[l[4]] >= 1 && c0[l[4]].quantity - c1[l[4]].quantity == cards[l[4]] && c1[l[4]].quantity >= 0 && (l.size() <= 5 || (cards[l[5]] >= 1 && c0[l[5]].quantity - c1[l[5]].quantity == cards[l[5]] && c1[l[5]].quantity >= 0 && (l.size() <= 6 || (cards[l[6]] >= 1 && c0[l[6]].quantity - c1[l[6]].quantity == cards[l[6]] && c1[l[6]].quantity >= 0 && (l.size() <= 7 || (cards[l[7]] >= 1 && c0[l[7]].quantity - c1[l[7]].quantity == cards[l[7]] && c1[l[7]].quantity >= 0 && (l.size() <= 8 || (cards[l[8]] >= 1 && c0[l[8]].quantity - c1[l[8]].quantity == cards[l[8]] && c1[l[8]].quantity >= 0 && (l.size() <= 9 || (cards[l[9]] >= 1 && c0[l[9]].quantity - c1[l[9]].quantity == cards[l[9]] && c1[l[9]].quantity >= 0 && true))))))))))))))))))));
-    }
-    function givingIn(c0, c1, l) {
-      return (l.size() <= 0 || (c1[l[0]].quantity - c0.get(l[0], {}).get('quantity', 0) == 1 && (l.size() <= 1 || (c1[l[1]].quantity - c0.get(l[1], {}).get('quantity', 0) == 1 && (l.size() <= 2 || (c1[l[2]].quantity - c0.get(l[2], {}).get('quantity', 0) == 1 && (l.size() <= 3 || (c1[l[3]].quantity - c0.get(l[3], {}).get('quantity', 0) == 1 && (l.size() <= 4 || (c1[l[4]].quantity - c0.get(l[4], {}).get('quantity', 0) == 1 && true))))))))));
-    }
-    function givingOut(c0, c1, l) {
-      return (l.size() <= 0 || (c0[l[0]].quantity - c1[l[0]].quantity == 1 && c1[l[0]].quantity >= 0 && (l.size() <= 1 || (c0[l[1]].quantity - c1[l[1]].quantity == 1 && c1[l[1]].quantity >= 0 && (l.size() <= 2 || (c0[l[2]].quantity - c1[l[2]].quantity == 1 && c1[l[2]].quantity >= 0 && (l.size() <= 3 || (c0[l[3]].quantity - c1[l[3]].quantity == 1 && c1[l[3]].quantity >= 0 && (l.size() <= 4 || (c0[l[4]].quantity - c1[l[4]].quantity == 1 && c1[l[4]].quantity >= 0 && true))))))))));
-    }
-    function cardMoves(c0, c1, item, mult, giving, gmult) {
-      return c1.diff(c0).affectedKeys().hasOnly((mult == 0 ? [] : itemCards(item)).concat(gmult == 0 ? [] : giving))
-        && (mult == 0 || item.type == 'booster' || item.type == 'display'
-          || (item.type == 'card' ? qtyMove(c0, c1, item.cardId, mult * item.quantity)
-            : (mult > 0 ? bundleIn(c0, c1, item.cards, item.cards.keys()) : bundleOut(c0, c1, item.cards, item.cards.keys()))))
-        && (gmult == 0 || (gmult > 0 ? givingIn(c0, c1, giving) : givingOut(c0, c1, giving)));
-    }
-    function invMoveOk(m0, m1, t, n) { return m1.diff(m0).affectedKeys().hasOnly([t]) && m1.get(t, 0) - m0.get(t, 0) == n; }
-    function itemMoves(b, a, item, mult, giving, gmult) {
-      return cardMoves(b.get('collection', {}), a.get('collection', {}), item, mult, giving, gmult)
-        && (item.type == 'booster'
-          ? invMoveOk(b.get('boosterInventory', {}), a.get('boosterInventory', {}), item.boosterType, mult * item.quantity)
-          : a.get('boosterInventory', {}) == b.get('boosterInventory', {}))
-        && (item.type == 'display'
-          ? invMoveOk(b.get('displayInventory', {}), a.get('displayInventory', {}), item.displayType, mult * item.quantity)
-          : a.get('displayInventory', {}) == b.get('displayInventory', {}));
-    }
-
-    // Taxe de l'Hôtel des Ventes : 10 % arrondis au-dessus (même calcul que market-service.js)
-    function proceeds(p) { return p - math.ceil(p * 0.1); }
-    function bidderAlive(hb) { return hb != null && exists(upath(hb)); }
-    function isBuyNow(la) { return la.status == 'ended' && la.get('soldBy', '') == 'buyNow'; }
-    // Pièces que ce joueur doit recevoir (+) ou payer (-) dans ce changement d'annonce (lb → la)
-    function auctionCoins(uid, lb, la, hb) {
-      return la.status == 'active' ? (uid == la.highestBidderId ? (uid == hb ? lb.currentPrice : 0) - la.currentPrice : (uid == hb ? lb.currentPrice : 0))
-        : isBuyNow(la) ? (uid == la.buyerId ? (uid == hb ? lb.currentPrice : 0) - la.currentPrice
-            : (uid == lb.sellerId ? proceeds(la.currentPrice) : (uid == hb ? lb.currentPrice : 0)))
-        : la.status == 'ended' ? (uid == lb.sellerId && bidderAlive(hb) ? proceeds(lb.currentPrice) : 0)
-        : la.status == 'cancelled' ? (uid == hb ? lb.currentPrice : 0)
-        : 0;
-    }
-    // Ce joueur reçoit-il l'objet de l'annonce ?
-    function auctionItem(uid, lb, la, hb) {
-      return isBuyNow(la) ? (uid == la.buyerId ? 1 : 0)
-        : la.status == 'ended' ? (bidderAlive(hb) ? (uid == hb ? 1 : 0) : (uid == lb.sellerId ? 1 : 0))
-        : la.status == 'completed' ? (uid == la.buyerId ? 1 : 0)
-        : la.status == 'cancelled' ? (uid == lb.sellerId ? 1 : 0)
-        : 0;
-    }
-    function auctionMoves(uid, b, a, lb, la) {
-      return lb.status == 'active' && la != lb
-        && coinDelta(b, a) == auctionCoins(uid, lb, la, lb.get('highestBidderId', null))
-        && itemMoves(b, a, listingItem(lb), auctionItem(uid, lb, la, lb.get('highestBidderId', null)),
-             la.status == 'completed' ? la.get('receivedCardIds', []) : [],
-             la.status == 'completed' ? (uid == la.buyerId ? -1 : (uid == lb.sellerId ? 1 : 0)) : 0);
-    }
-    function auctionPartyValid(uid, b, a, id) { return auctionMoves(uid, b, a, get(lpath(id)).data, getAfter(lpath(id)).data); }
-
-    // Échange entre amis : je reçois l'offre de l'autre (other) et je donne la mienne (mine)
-    function tradeGiveOk(c0, c1, mine, other, l) {
-      return (l.size() <= 0 || (c0[l[0]].quantity - c1[l[0]].quantity == mine.cards[l[0]] - other.cards.get(l[0], 0) && c1[l[0]].quantity >= 0 && (l.size() <= 1 || (c0[l[1]].quantity - c1[l[1]].quantity == mine.cards[l[1]] - other.cards.get(l[1], 0) && c1[l[1]].quantity >= 0 && (l.size() <= 2 || (c0[l[2]].quantity - c1[l[2]].quantity == mine.cards[l[2]] - other.cards.get(l[2], 0) && c1[l[2]].quantity >= 0 && (l.size() <= 3 || (c0[l[3]].quantity - c1[l[3]].quantity == mine.cards[l[3]] - other.cards.get(l[3], 0) && c1[l[3]].quantity >= 0 && (l.size() <= 4 || (c0[l[4]].quantity - c1[l[4]].quantity == mine.cards[l[4]] - other.cards.get(l[4], 0) && c1[l[4]].quantity >= 0 && (l.size() <= 5 || (c0[l[5]].quantity - c1[l[5]].quantity == mine.cards[l[5]] - other.cards.get(l[5], 0) && c1[l[5]].quantity >= 0 && true))))))))))));
-    }
-    function tradeGetOk(c0, c1, mine, other, l) {
-      return (l.size() <= 0 || (c1[l[0]].quantity - c0.get(l[0], {}).get('quantity', 0) == other.cards[l[0]] - mine.cards.get(l[0], 0) && (l.size() <= 1 || (c1[l[1]].quantity - c0.get(l[1], {}).get('quantity', 0) == other.cards[l[1]] - mine.cards.get(l[1], 0) && (l.size() <= 2 || (c1[l[2]].quantity - c0.get(l[2], {}).get('quantity', 0) == other.cards[l[2]] - mine.cards.get(l[2], 0) && (l.size() <= 3 || (c1[l[3]].quantity - c0.get(l[3], {}).get('quantity', 0) == other.cards[l[3]] - mine.cards.get(l[3], 0) && (l.size() <= 4 || (c1[l[4]].quantity - c0.get(l[4], {}).get('quantity', 0) == other.cards[l[4]] - mine.cards.get(l[4], 0) && (l.size() <= 5 || (c1[l[5]].quantity - c0.get(l[5], {}).get('quantity', 0) == other.cards[l[5]] - mine.cards.get(l[5], 0) && true))))))))))));
-    }
-    function tradeBoostersOk(m0, m1, mine, other) {
-      return m1.diff(m0).affectedKeys().hasOnly(boosterTypes())
-        && d(m0, m1, 'classic') == other.boosters.get('classic', 0) - mine.boosters.get('classic', 0)
-        && d(m0, m1, 'v2') == other.boosters.get('v2', 0) - mine.boosters.get('v2', 0)
-        && d(m0, m1, 'v3') == other.boosters.get('v3', 0) - mine.boosters.get('v3', 0)
-        && d(m0, m1, 'legendary') == other.boosters.get('legendary', 0) - mine.boosters.get('legendary', 0)
-        && d(m0, m1, 'v3_legendary') == other.boosters.get('v3_legendary', 0) - mine.boosters.get('v3_legendary', 0);
-    }
-    function tradeMoves(b, a, mine, other) {
-      let c0 = b.get('collection', {});
-      let c1 = a.get('collection', {});
-      return coinDelta(b, a) == other.coins - mine.coins
-        && tradeBoostersOk(b.get('boosterInventory', {}), a.get('boosterInventory', {}), mine, other)
-        && a.get('displayInventory', {}) == b.get('displayInventory', {})
-        && c1.diff(c0).affectedKeys().hasOnly(mine.cards.keys().concat(other.cards.keys()))
-        && tradeGiveOk(c0, c1, mine, other, mine.cards.keys()) && tradeGetOk(c0, c1, mine, other, other.cards.keys());
-    }
-    function tradeParty(uid, b, a, tb, ta) {
-      return [tb.from, tb.to].hasAny([uid]) && tb.status == 'accepted' && ta.status == 'completed'
-        && tradeMoves(b, a, uid == tb.from ? tb.offerA : tb.offerB, uid == tb.from ? tb.offerB : tb.offerA);
-    }
-    function tradePartyValid(uid, b, a, id) { return tradeParty(uid, b, a, get(tpath(id)).data, getAfter(tpath(id)).data); }
-
-    // Don de carte dans un clan : l'auteur de la demande reçoit exactement 1 exemplaire de la carte demandée
-    function clanRequestParty(uid, b, a, rb, ra) {
-      return rb.uid == uid && request.auth.uid != uid
-        && ra.received == rb.received + 1
-        && ra.donors.get(request.auth.uid, 0) == rb.donors.get(request.auth.uid, 0) + 1
-        && coinDelta(b, a) == 0
-        && a.get('boosterInventory', {}) == b.get('boosterInventory', {})
-        && a.get('displayInventory', {}) == b.get('displayInventory', {})
-        && cardKeys(b, a).hasOnly([rb.cardId]) && qty(a.get('collection', {}), rb.cardId) - qty(b.get('collection', {}), rb.cardId) == 1;
-    }
-    function clanRequestPartyValid(uid, b, a, d) {
-      return clanRequestParty(uid, b, a,
-        get(/databases/$(database)/documents/clans/$(d.clan)/requests/$(d.id)).data,
-        getAfter(/databases/$(database)/documents/clans/$(d.clan)/requests/$(d.id)).data);
-    }
-
-    function dealValid(userId, b, a, d) {
-      return isSignedIn()
-        && a.diff(b).affectedKeys().hasOnly(['coins', 'collection', 'boosterInventory', 'displayInventory', 'stats', 'lastDeal'])
-        && balancesValid(b, a)
-        && (d.get('kind', '') == 'auction' ? auctionPartyValid(userId, b, a, d.id)
-          : d.get('kind', '') == 'trade' ? tradePartyValid(userId, b, a, d.id)
-          : d.get('kind', '') == 'clanRequest' ? clanRequestPartyValid(userId, b, a, d)
-          : false);
-    }
-    function dealUpdateValid(userId) { return dealValid(userId, resource.data, request.resource.data, request.resource.data.lastDeal); }
 
     // Nouveau compte : 50 pièces maximum, rien d'autre
     function zeroInventory(m) { return m.keys().size() == 0 || m.values().hasOnly([0]); }
     function newUserValid(d) {
       return d.get('coins', 0) is int && d.get('coins', 0) >= 0 && d.get('coins', 0) <= 50
         && d.get('collection', {}).size() == 0
-        && d.get('boosterInventory', {}).keys().hasOnly(boosterTypes()) && zeroInventory(d.get('boosterInventory', {}))
-        && d.get('displayInventory', {}).keys().hasOnly(displayTypes()) && zeroInventory(d.get('displayInventory', {}))
-        && !d.keys().hasAny(['econ', 'lastDeal', 'achievements', 'packsBought', 'giftCalendar', 'clanId', 'friends', 'shop', 'stats']);
+        && zeroInventory(d.get('boosterInventory', {})) && zeroInventory(d.get('displayInventory', {}))
+        && d.get('battlePass', {}).get('xp', 0) == 0 && d.get('battlePass', {}).get('claimedRewards', {}).size() == 0
+        && d.get('dailyBoosterOpenedCount', 0) == 0 && d.get('dailyV2BoosterOpenedCount', 0) == 0
+        && !d.keys().hasAny(['econ', 'lastDeal', 'achievements', 'packsBought', 'giftCalendar', 'clanId', 'friends', 'shop', 'stats', 'pseudoChanged']);
     }
 
-    // --- ANNONCES DE L'HÔTEL DES VENTES ---
-
-    function posInt(n) { return n is int && n >= 1; }
-    function itemValid(it) {
-      return it is map && (
-        it.type == 'booster' ? (it.keys().hasOnly(['type', 'boosterType', 'quantity']) && it.boosterType in boosterValues() && posInt(it.quantity))
-        : it.type == 'display' ? (it.keys().hasOnly(['type', 'displayType', 'quantity']) && it.displayType in displayValues() && posInt(it.quantity))
-        : it.type == 'card' ? (it.keys().hasOnly(['type', 'cardId', 'quantity']) && it.cardId is string && posInt(it.quantity))
-        : it.type == 'bundle' ? (it.keys().hasOnly(['type', 'cards', 'quantity']) && it.cards is map
-            && it.cards.size() >= 1 && it.cards.size() <= 6 && posInt(it.quantity) && it.quantity >= 2)
-        : false);
-    }
-    function wantedValid(w, it, mode) {
-      return w is list && w.size() >= 1 && w.size() <= 5 && w.toSet().size() == w.size()
-        && (mode == 'one' || mode == 'all')
-        && !w.hasAny(itemCards(it));
-    }
-    // Mise en vente : l'objet quitte vraiment l'inventaire du vendeur dans la même transaction
-    function listingCreateOk(d, me, ub, ua) {
-      return d.keys().hasOnly(['type', 'item', 'cardId', 'quantity', 'sellerId', 'sellerPseudo', 'startPrice', 'currentPrice',
-          'allowBids', 'buyNowPrice', 'highestBidderId', 'highestBidderPseudo', 'wantedCardIds', 'wantMode', 'createdAt', 'endTime', 'status'])
-        && d.sellerId == me && d.status == 'active' && d.highestBidderId == null
-        && (d.type == 'auction' || d.type == 'trade')
-        && d.startPrice is int && d.startPrice >= 0 && d.startPrice <= 1000000 && d.currentPrice == d.startPrice
-        && (d.buyNowPrice == null || (d.buyNowPrice is int && d.buyNowPrice > d.startPrice && d.buyNowPrice <= 1000000))
-        && d.allowBids is bool && (d.allowBids || (d.type == 'auction' && d.buyNowPrice == null))
-        && d.endTime is timestamp && d.endTime > request.time && d.endTime < request.time + duration.value(49, 'h')
-        && itemValid(d.item) && d.quantity == d.item.quantity
-        // Cartes connues du jeu (objet et cartes demandées), vérifiées d'un coup
-        && itemCards(d.item).concat(d.wantedCardIds).toSet().hasOnly(allCardIds())
-        && (d.type == 'auction' ? d.wantedCardIds.size() == 0 : wantedValid(d.wantedCardIds, d.item, d.wantMode))
-        && coinDelta(ub, ua) == 0 && itemMoves(ub, ua, d.item, -1, [], 0);
-    }
-    function listingCreateValid() {
-      return listingCreateOk(request.resource.data, request.auth.uid,
-        get(upath(request.auth.uid)).data, getAfter(upath(request.auth.uid)).data);
-    }
-
-    function listingFixedKeys() {
-      return ['type', 'item', 'cardId', 'quantity', 'sellerId', 'sellerPseudo', 'startPrice', 'allowBids',
-              'buyNowPrice', 'wantedCardIds', 'wantMode', 'createdAt'];
-    }
-    function bidValid(b, a, me, hb, id) {
-      return a.status == 'active' && changedKeys().hasOnly(['currentPrice', 'highestBidderId', 'highestBidderPseudo'])
-        && b.get('type', 'auction') == 'auction' && b.get('allowBids', true) != false
-        && a.highestBidderId == me && me != b.sellerId && request.time < b.endTime
-        && a.currentPrice is int && a.currentPrice > b.currentPrice
-        && (b.get('buyNowPrice', null) == null || a.currentPrice < b.buyNowPrice)
-        && stamped(me, 'auction', id) && (hb == null || hb == me || stamped(hb, 'auction', id));
-    }
-    function buyNowValid(b, a, me, hb, id) {
-      return isBuyNow(a)
-        && changedKeys().hasOnly(['status', 'soldBy', 'currentPrice', 'highestBidderId', 'highestBidderPseudo',
-             'buyerId', 'buyerPseudo', 'endedAt', 'endTime', 'buyerGotNew'])
-        && a.buyerId == me && a.highestBidderId == me && me != b.sellerId && request.time < b.endTime
-        && ((b.get('type', 'auction') == 'auction' && b.get('allowBids', true) != false && b.get('buyNowPrice', null) != null
-              && b.currentPrice < b.buyNowPrice && a.currentPrice == b.buyNowPrice)
-            || (b.get('allowBids', true) == false && a.currentPrice == b.currentPrice))
-        && stamped(me, 'auction', id)
-        && (!exists(upath(b.sellerId)) || stamped(b.sellerId, 'auction', id))
-        && (hb == null || hb == me || stamped(hb, 'auction', id));
-    }
-    function tradeListingValid(b, a, me, id) {
-      let g = a.get('receivedCardIds', []);
-      return b.get('type', 'auction') == 'trade' && a.status == 'completed'
-        && changedKeys().hasOnly(['status', 'buyerId', 'buyerPseudo', 'receivedCardId', 'receivedCardIds', 'completedAt', 'buyerGotNew', 'sellerGotNew'])
-        && a.buyerId == me && me != b.sellerId && request.time < b.endTime
-        && g is list && (b.wantMode == 'all' ? g == b.wantedCardIds : (g.size() == 1 && b.wantedCardIds.hasAny(g)))
-        && stamped(me, 'auction', id) && stamped(b.sellerId, 'auction', id);
-    }
-    function cancelValid(b, a, me, hb, id) {
-      return me == b.sellerId && a.status == 'cancelled' && changedKeys().hasOnly(['status', 'cancelledAt'])
-        && stamped(me, 'auction', id) && (hb == null || !exists(upath(hb)) || stamped(hb, 'auction', id));
-    }
-    // Clôture d'une annonce expirée par un participant (sinon par GitHub Actions)
-    function finalizeValid(b, a, me, hb, id) {
-      return request.time >= b.endTime && a.status == 'ended' && a.get('soldBy', '') != 'buyNow'
-        && changedKeys().hasOnly(['status', 'endedAt', 'buyerGotNew'])
-        && (me == b.sellerId || me == hb)
-        && (!exists(upath(b.sellerId)) || stamped(b.sellerId, 'auction', id))
-        && (!bidderAlive(hb) || stamped(hb, 'auction', id));
-    }
-    function listingUpdateValid(id) {
-      let b = resource.data;
-      let a = request.resource.data;
-      let me = request.auth.uid;
-      let hb = b.get('highestBidderId', null);
-      return b.status == 'active' && !changedKeys().hasAny(listingFixedKeys())
-        && (bidValid(b, a, me, hb, id) || buyNowValid(b, a, me, hb, id) || tradeListingValid(b, a, me, id)
-            || cancelValid(b, a, me, hb, id) || finalizeValid(b, a, me, hb, id));
-    }
-
-    // --- ÉCHANGES ENTRE AMIS ---
-
-    function offerQtyOk(c, l) {
-      return (l.size() <= 0 || (c[l[0]] is int && c[l[0]] >= 1 && (l.size() <= 1 || (c[l[1]] is int && c[l[1]] >= 1 && (l.size() <= 2 || (c[l[2]] is int && c[l[2]] >= 1 && (l.size() <= 3 || (c[l[3]] is int && c[l[3]] >= 1 && (l.size() <= 4 || (c[l[4]] is int && c[l[4]] >= 1 && (l.size() <= 5 || (c[l[5]] is int && c[l[5]] >= 1 && (l.size() <= 6 || (c[l[6]] is int && c[l[6]] >= 1 && (l.size() <= 7 || (c[l[7]] is int && c[l[7]] >= 1 && (l.size() <= 8 || (c[l[8]] is int && c[l[8]] >= 1 && (l.size() <= 9 || (c[l[9]] is int && c[l[9]] >= 1 && true))))))))))))))))))));
-    }
+    // Échanges entre amis : les offres et « prêt » sont écrits par les joueurs, la validation par le serveur
     function offerValid(o) {
-      let bo = o.get('boosters', {});
       return o is map && o.keys().hasOnly(['cards', 'coins', 'boosters'])
-        && o.coins is int && o.coins >= 0
-        && o.cards is map && o.cards.size() <= 6
-        && (o.cards.size() == 0 || (o.cards.keys().toSet().hasOnly(allCardIds()) && offerQtyOk(o.cards, o.cards.keys())))
-        && bo is map && bo.keys().hasOnly(boosterTypes())
-        && natural(bo, 'classic') && natural(bo, 'v2') && natural(bo, 'v3') && natural(bo, 'legendary') && natural(bo, 'v3_legendary');
+        && o.coins is int && o.coins >= 0 && o.cards is map && o.cards.size() <= 10 && o.boosters is map;
     }
-    function tradeUpdateValid(id) {
+    function tradeUpdateValid() {
       let b = resource.data;
       let a = request.resource.data;
       let isA = request.auth.uid == b.from;
@@ -705,11 +95,7 @@ service cloud.firestore {
         || (b.status == 'pending' && !isA && changedKeys().hasOnly(['status']) && (a.status == 'accepted' || a.status == 'refused'))
         // Expiré ou annulé
         || ((b.status == 'pending' || b.status == 'accepted') && changedKeys().hasOnly(['status'])
-          && (a.status == 'expired' || a.status == 'canceled'))
-        // Validation : les deux sont prêts, les offres ne bougent plus, les deux comptes sont modifiés
-        || (b.status == 'accepted' && b.readyA == true && b.readyB == true && a.status == 'completed'
-          && changedKeys().hasOnly(['status', 'completedAt', 'newCardsFrom', 'newCardsTo'])
-          && stamped(b.from, 'trade', id) && stamped(b.to, 'trade', id));
+          && (a.status == 'expired' || a.status == 'canceled'));
     }
 
     // --- RÈGLES PAR COLLECTION ---
@@ -719,31 +105,18 @@ service cloud.firestore {
       // Lecture par tout joueur connecté (pseudo d'un vendeur, profil d'un ami…)
       allow read: if isSignedIn();
       allow create: if isOwner(userId) && newUserValid(request.resource.data);
-      // Mon compte : plafond de gains du jour. Une affaire entre joueurs : vérifiée au chiffre près. Les amis.
-      allow update: if (isOwner(userId) && !isDealWrite() && soloUpdateValid(userId))
-        || (isDealWrite() && dealUpdateValid(userId))
-        || (!isOwner(userId) && friendUpdate(userId));
+      allow update: if (isOwner(userId) && ownUpdateValid()) || (!isOwner(userId) && friendUpdate(userId));
       allow delete: if false;
     }
 
-    // Reçu des cartes touchées par une écriture sur mon compte (voir receiptValid)
-    match /econ/{userId} {
-      allow read: if isOwner(userId);
-      allow create, update: if isOwner(userId) && receiptValid(request.resource.data,
-        get(upath(userId)).data.get('collection', {}), getAfter(upath(userId)).data.get('collection', {}));
-    }
-
-    // 2. ENCHÈRES (Hôtel des Ventes)
+    // 2. HÔTEL DES VENTES : lecture seulement (annonces, mises, achats et clôtures par le serveur)
     match /auctions/{auctionId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && listingCreateValid();
-      allow update: if isSignedIn() && listingUpdateValid(auctionId);
+      allow write: if false;
     }
     match /auctions/{auctionId}/bids/{bidId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.bidderId == request.auth.uid
-        && getAfter(lpath(auctionId)).data.highestBidderId == request.auth.uid
-        && request.resource.data.amount == getAfter(lpath(auctionId)).data.currentPrice;
+      allow write: if false;
     }
 
     // 3. ÉCHANGES ENTRE AMIS
@@ -758,7 +131,7 @@ service cloud.firestore {
         && get(upath(request.auth.uid)).data.get('friends', []).hasAny([request.resource.data.to]);
       allow update: if isSignedIn() && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid)
         && !changedKeys().hasAny(['from', 'to', 'createdAt'])
-        && tradeUpdateValid(tradeId);
+        && tradeUpdateValid();
     }
 
     // 4. CHAT GÉNÉRAL — lecture par les joueurs connectés ; un message = mon identifiant, mon vrai pseudo,
@@ -792,13 +165,8 @@ service cloud.firestore {
     }
     match /clans/{clanId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn()
-        && request.resource.data.keys().hasOnly(['name', 'tag', 'description', 'emblem', 'ownerId', 'members', 'createdAt'])
-        && request.resource.data.ownerId == request.auth.uid
-        && request.resource.data.members == [request.auth.uid]
-        && request.resource.data.createdAt == request.time
-        && clanFieldsValid()
-        && myClanIdAfter() == clanId;
+      // Création : par le serveur (elle coûte des pièces)
+      allow create: if false;
       allow update: if isSignedIn() && clanFieldsValid() && (
         // Rejoindre / quitter : seulement moi
         (changedKeys().hasOnly(['members']) && onlyMyIdChanges('members')
@@ -817,28 +185,10 @@ service cloud.firestore {
       );
       allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid && resource.data.members.size() <= 1;
 
-      // Demandes de cartes : 1 demande à la fois par joueur (au moins 6 h d'écart, le jeu limite à 1 par jour).
-      // Un don = +1 reçu, mon compteur de dons +1, et je perds vraiment un exemplaire de la carte.
+      // Demandes de cartes et dons : par le serveur (les dons rapportent des pièces)
       match /requests/{requestId} {
         allow read: if isSignedIn() && isClanMember(clanId);
-        allow create: if isSignedIn() && isClanMember(clanId)
-          && request.resource.data.keys().hasOnly(['uid', 'pseudo', 'cardId', 'needed', 'received', 'donors', 'createdAt'])
-          && request.resource.data.uid == request.auth.uid
-          && request.resource.data.cardId is string
-          && request.resource.data.needed is int && request.resource.data.needed >= 1 && request.resource.data.needed <= 4
-          && request.resource.data.received == 0 && request.resource.data.donors == {}
-          && request.resource.data.createdAt == request.time
-          && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.lastClanRequestAt == request.time
-          && (!('lastClanRequestAt' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data)
-              || request.time > get(/databases/$(database)/documents/users/$(request.auth.uid)).data.lastClanRequestAt + duration.value(6, 'h'));
-        allow update: if isSignedIn() && isClanMember(clanId) && request.auth.uid != resource.data.uid
-          && changedKeys().hasOnly(['received', 'donors'])
-          && request.resource.data.received == resource.data.received + 1
-          && request.resource.data.received <= resource.data.needed
-          && request.resource.data.donors.diff(resource.data.donors).affectedKeys().hasOnly([request.auth.uid])
-          && request.resource.data.donors.get(request.auth.uid, 0) == resource.data.donors.get(request.auth.uid, 0) + 1
-          && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.collection[resource.data.cardId].quantity
-             == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.collection[resource.data.cardId].quantity - 1;
+        allow write: if false;
       }
 
       // Chat du clan : réservé aux membres

@@ -1,16 +1,13 @@
 // Fichier: marche.js — interface de l'Hôtel des Ventes (la logique est dans market-service.js)
 import { collection, query, where, doc, onSnapshot, orderBy } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
-import { getAuth } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
 import { db } from './firebase-config.js';
 import { protectPage } from './auth-manager.js';
 import { showToast, showConfirmDialog } from './toast.js';
-import { updateUserStats } from './stats-manager.js';
-import { updateQuestProgress } from './quest-manager.js';
+import { callServer } from './api.js';
 import {
     ALL_CARDS, BOOSTER_INFO, DISPLAY_INFO, DURATIONS_HOURS, MAX_WANTED_CARDS,
     findCard, cardLabel, getListingItem, getListingType, describeItem, minPriceFor, sellerProceeds, MARKET_TAX_RATE,
-    createListing, placeBid, acceptTradeListing, cancelListing, finalizeExpiredListings, sellToConsole,
-    buyNow, canBuyNow, buyNowPriceOf, saleKind, suggestedPrices, MAX_PRICE, bundleCards, MAX_BUNDLE_CARDS
+    canBuyNow, buyNowPriceOf, saleKind, suggestedPrices, MAX_PRICE, bundleCards, MAX_BUNDLE_CARDS
 } from './market-service.js';
 import { play } from './sfx.js';
 import { seriesOfBooster, seriesOfCard, seriesStatus } from './series-config.js';
@@ -69,21 +66,11 @@ function itemVisual(item, extraClass = '') {
 
 // ---------- Vente console (utilisée aussi par la page Collection) ----------
 
-export async function sellCardToConsole(cardId, quantity = 1, pricePerCard = 1, rarity = null) {
-    const user = getAuth().currentUser;
-    if (!user) {
-        showToast("error", "Utilisateur non connecté !");
-        return;
-    }
+export async function sellCardToConsole(cardId, quantity = 1) {
     try {
-        await sellToConsole(user.uid, cardId, quantity, pricePerCard);
-        await updateUserStats(user.uid, { cardsSoldConsole: quantity });
-        await updateQuestProgress('sell_console', quantity);
-        const usedRarity = rarity || findCard(cardId)?.rarity;
-        // On compte chaque carte vendue (vendre 2 épiques d'un coup = 2 pour la quête)
-        if (usedRarity === 'epique') await updateQuestProgress('sell_epic_console', quantity);
-        if (usedRarity === 'Légendaire') await updateQuestProgress('sell_legendary_console', quantity);
-        showToast("success", `Carte vendue à la console pour ${pricePerCard * quantity} pièce(s) !`);
+        // Le serveur fixe le prix (selon la rareté) et fait avancer les quêtes de vente
+        const { coins } = await callServer('sellConsole', { cardId, quantity });
+        showToast("success", `Carte vendue à la console pour ${coins} pièce(s) !`);
     } catch (error) {
         showToast("error", error.message || "Erreur lors de la vente à la console.");
         console.error("Erreur vente console :", error);
@@ -154,19 +141,19 @@ async function initializeMarketplace() {
 }
 
 async function runFinalize() {
-    const results = await finalizeExpiredListings(me?.uid);
-    for (const { listing, outcome } of results) {
-        const item = getListingItem(listing);
-        const name = describeItem(item).name;
-        if (outcome === 'sold') {
-            // La quête ne peut être créditée qu'au joueur connecté : seulement s'il est le gagnant
-            if (listing.highestBidderId === me.uid) {
-                await updateQuestProgress('win_bid');
-                showToast('success', `🎉 Tu as remporté ${name} !`);
-            }
-            if (listing.sellerId === me.uid) showToast('success', `💰 ${name} vendu pour ${listing.currentPrice} pièces (tu reçois ${sellerProceeds(listing.currentPrice)} après la taxe) !`);
+    let results = [];
+    try {
+        ({ results } = await callServer('finalizeExpired'));
+    } catch (e) {
+        console.error('Clôture des annonces expirées :', e); // GitHub Actions les clôture aussi
+    }
+    for (const r of results) {
+        const name = describeItem(r.item).name;
+        if (r.outcome === 'sold') {
+            if (r.highestBidderId === me.uid) showToast('success', `🎉 Tu as remporté ${name} !`);
+            if (r.sellerId === me.uid) showToast('success', `💰 ${name} vendu pour ${r.currentPrice} pièces (tu reçois ${sellerProceeds(r.currentPrice)} après la taxe) !`);
         }
-        if (outcome === 'returned' && listing.sellerId === me.uid) showToast('info', `${name} n'a pas trouvé preneur : il t'a été rendu.`);
+        if (r.outcome === 'returned' && r.sellerId === me.uid) showToast('info', `${name} n'a pas trouvé preneur : il t'a été rendu.`);
     }
 }
 
@@ -706,10 +693,9 @@ async function handleBuyNow(listing) {
     if (!ok) return;
     busy = true;
     try {
-        await buyNow(me, listing.id);
+        await callServer('buyNow', { listingId: listing.id });
         play('coins');
         showToast('success', `🎉 ${name} est à toi ! Il est déjà dans ton inventaire.`, 5000);
-        updateQuestProgress('win_bid');
         closeListingModal();
     } catch (e) {
         showToast('error', e.message || "Achat impossible.");
@@ -723,9 +709,8 @@ async function handleBid(listing) {
     const amount = parseInt(document.getElementById('bid-amount-input').value, 10);
     busy = true;
     try {
-        await placeBid(me, listing.id, amount);
+        await callServer('placeBid', { listingId: listing.id, amount });
         showToast('success', `Enchère placée : ${amount} pièces !`);
-        updateQuestProgress('place_bid');
     } catch (e) {
         showToast('error', e.message || "Erreur lors de la mise.");
     } finally {
@@ -747,12 +732,10 @@ async function handleGive(listing, cardId) {
     if (!ok) return;
     busy = true;
     try {
-        await acceptTradeListing(me, listing.id, cardId);
+        await callServer('acceptTradeListing', { listingId: listing.id, cardId: cardId || null });
         showToast('success', `🔄 Échange réussi ! Tu as reçu ${itemName}.`);
         closeListingModal();
         refreshHistory();
-        const item = getListingItem(listing);
-        if (item.type === 'card') updateQuestProgress('obtain_10_diff_cards_24h', 1, { cardId: item.cardId });
     } catch (e) {
         showToast('error', e.message || "Échange impossible.");
     } finally {
@@ -769,7 +752,7 @@ async function handleCancel(listing) {
     });
     if (!ok) return;
     try {
-        await cancelListing(me, listing.id);
+        await callServer('cancelListing', { listingId: listing.id });
         showToast('success', "Annonce annulée, l'objet t'a été rendu.");
         closeListingModal();
         refreshHistory();
@@ -1097,14 +1080,13 @@ async function publish() {
     const button = document.getElementById('publish-button');
     button.disabled = true;
     try {
-        await createListing(me, draft.mode === 'trade'
+        await callServer('createListing', draft.mode === 'trade'
             ? { mode: 'trade', item, wantedCardIds: draft.wanted, wantMode: draft.wanted.length > 1 ? draft.wantMode : 'one', durationHours: draft.duration }
             : draft.mode === 'fixed'
                 ? { mode: 'auction', item, fixedPrice: true, buyNowPrice: draft.fixed, durationHours: draft.duration }
                 : { mode: 'auction', item, startPrice: draft.price, buyNowPrice: draft.buyNowOn ? draft.buyNow : null, durationHours: draft.duration });
         showToast('success', 'Annonce publiée ! Retrouve-la dans « Mes ventes ».');
         play('coins');
-        updateQuestProgress('create_auction');
         closeCreateModal();
         document.querySelector('#market-tabs [data-tab="mine"]').click();
     } catch (e) {

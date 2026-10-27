@@ -6,12 +6,13 @@ import { db } from './firebase-config.js';
 import { protectPage } from './auth-manager.js';
 import { showToast, showConfirmDialog } from './toast.js';
 import { play } from './sfx.js';
+import { callServer } from './api.js';
 import { getDayKey } from './daily-utils.js';
 import { ALL_CARDS, findCard } from './market-service.js';
 import {
     CLAN_COST, MAX_MEMBERS, EMBLEMS, REQUEST_NEEDED, DONATION_REWARD, REQUEST_DURATION_MS,
-    getMyClan, listClans, createClan, joinClan, leaveClan, kickMember, updateClanDescription, clanDetails,
-    rankClans, createCardRequest, donateCard
+    getMyClan, listClans, joinClan, leaveClan, kickMember, updateClanDescription, clanDetails,
+    rankClans
 } from './clan-service.js';
 
 const root = document.getElementById('clan-root');
@@ -69,12 +70,12 @@ async function renderNoClan(token) {
         b.onclick = () => { emblem = b.dataset.emblem; root.querySelectorAll('.emblem').forEach(x => x.classList.toggle('active', x === b)); };
     });
     document.getElementById('clan-tag').addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); });
-    document.getElementById('clan-create-btn').onclick = () => act(() => createClan(me.uid, {
+    document.getElementById('clan-create-btn').onclick = () => act(() => callServer('createClan', { input: {
         name: document.getElementById('clan-name').value,
         tag: document.getElementById('clan-tag').value,
         description: document.getElementById('clan-desc').value,
         emblem
-    }), 'Clan créé ! Bienvenue chef 👑');
+    } }), 'Clan créé ! Bienvenue chef 👑');
     root.querySelectorAll('[data-join]').forEach(b => { b.onclick = () => act(() => joinClan(me.uid, b.dataset.join), 'Tu as rejoint le clan !'); });
 }
 
@@ -184,7 +185,7 @@ function renderRequests() {
             </div>`;
     }).join('');
     box.querySelectorAll('[data-donate]').forEach(b => {
-        b.onclick = () => act(async () => { const n = await donateCard(me.uid, currentClanId, b.dataset.donate); play('coins'); return n; }, (n) => `Carte donnée ! +${n} pièces 🎁`);
+        b.onclick = () => act(async () => { const { coins } = await callServer('donateCard', { clanId: currentClanId, requestId: b.dataset.donate }); play('coins'); return coins; }, (n) => `Carte donnée ! +${n} pièces 🎁`);
     });
 }
 
@@ -210,7 +211,7 @@ function openCardPicker(clanId) {
         overlay.querySelector('.settings-close').onclick = () => overlay.remove();
         overlay.querySelectorAll('[data-f]').forEach(b => { b.onclick = () => { filter = b.dataset.f; draw(); }; });
         overlay.querySelectorAll('[data-card]').forEach(b => {
-            b.onclick = () => { overlay.remove(); act(() => createCardRequest(me.uid, clanId, b.dataset.card), 'Demande envoyée au clan ! 📨'); };
+            b.onclick = () => { overlay.remove(); act(() => callServer('createCardRequest', { clanId, cardId: b.dataset.card }), 'Demande envoyée au clan ! 📨'); };
         });
     };
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });

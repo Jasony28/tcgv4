@@ -7,12 +7,12 @@ import {
     XP_PER_LEVEL, MAX_LEVEL, REWARD_ICONS
 } from './battlepass-config.js';
 import { showToast } from './toast.js';
-import { computeMaxStreak, normalizeBattlePass, claimPassRewards } from './quest-manager.js';
+import { computeMaxStreak, normalizeBattlePass } from './quest-manager.js';
+import { callServer } from './api.js';
 import { getDayKey, getWeekKey, msUntilNextDay, msUntilNextWeek, formatDuration } from './daily-utils.js';
 import { allCards } from './cards.js';
 import { allCardsV2 } from './cards1.js';
 import { allCardsV3Released } from './cards-v3.js';
-import { isCardProduced } from './series-config.js';
 
 const CARD_POOL = [...allCards, ...allCardsV2, ...allCardsV3Released];
 
@@ -154,23 +154,15 @@ async function claimRewards(rewards) {
     claimAllButton.disabled = true;
     document.querySelectorAll('.claim-button').forEach(b => { b.disabled = true; });
 
-    // Cartes aléatoires tirées avant la transaction
-    const drawnCards = {};
-    for (const r of rewards) {
-        if (r.type === 'random_card') {
-            // Seulement des cartes de séries encore en cours
-            const candidates = CARD_POOL.filter(c => c.rarity === r.rarity && isCardProduced(c) && (!r.version || c.version === r.version));
-            drawnCards[r.step] = candidates[Math.floor(Math.random() * candidates.length)];
-        }
-    }
-
     try {
-        await claimPassRewards(userData.uid, rewards, drawnCards);
+        // Le serveur vérifie les paliers et tire les cartes aléatoires
+        const res = await callServer('claimPass', { steps: rewards.map(r => r.step) });
+        const drawnCards = Object.fromEntries(Object.entries(res.cards || {}).map(([step, id]) => [step, CARD_POOL.find(c => c.id === id)]));
 
         // Affichage mis à jour tout de suite (sans attendre le rechargement du compte)
         for (const r of rewards) bp.claimedRewards[r.step] = true;
         renderAll();
-        const names = rewards.map(r => r.type === 'random_card' ? `${drawnCards[r.step].name} (${r.description})` : r.description);
+        const names = rewards.map(r => r.type === 'random_card' ? `${drawnCards[r.step]?.name || 'Carte'} (${r.description})` : r.description);
         showToast('success', `Récupéré : ${names.join(', ')}`, 4500);
         play('coins');
     } catch (error) {
